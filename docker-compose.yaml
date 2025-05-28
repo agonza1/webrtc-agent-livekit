@@ -80,17 +80,61 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+    networks:
+      - lknetwork
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
 
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:9.5.2
     container_name: grafana
     ports:
       - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_AUTH_DISABLE_SIGNOUT_MENU=false
+      - GF_AUTH_DISABLE_REMEMBER_ME=false
+      - GF_AUTH_DISABLE_LOGIN=false
+      - GF_AUTH_DISABLE_GRAVATAR=true
+      - GF_AUTH_DISABLE_BASIC_AUTH=false
+      - GF_AUTH_DISABLE_BRUTE_FORCE_LOGIN_PROTECTION=true
+      - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=false
+      - GF_SECURITY_SECRET_KEY=your-secret-key
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SECURITY_COOKIE_SECURE=false
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_SECURITY_STRICT_TRANSPORT_SECURITY=false
+      - GF_SECURITY_STRICT_TRANSPORT_SECURITY_MAX_AGE_SECONDS=0
+      - GF_LIVE_ENABLED=true
+      - GF_LIVE_MAX_CONNECTION_LIFETIME=1h
+      - GF_LIVE_HA_MODE=false
+      - GF_LIVE_PUSHER_ENABLED=true
+      - GF_LIVE_PUSHER_BACKEND=memory
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+    networks:
+      - lknetwork
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   grafana-data:
