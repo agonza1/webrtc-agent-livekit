@@ -1,6 +1,10 @@
 import asyncio
 import logging
 import json
+import os
+import shutil
+import atexit
+import time
 from collections.abc import AsyncIterable
 from datetime import datetime
 
@@ -19,7 +23,16 @@ from livekit.agents import (
 from livekit.agents.llm.chat_context import ChatContext, ChatMessage
 from livekit.plugins.turn_detector.english import EnglishModel
 from livekit.plugins import deepgram, groq, openai, silero
-from prometheus_client import start_http_server, Summary, Counter, Gauge
+from prometheus_client import (
+    start_http_server, 
+    Summary, 
+    Counter, 
+    Gauge, 
+    CollectorRegistry, 
+    multiprocess, 
+    generate_latest,
+    CONTENT_TYPE_LATEST
+)
 from livekit.agents.metrics import LLMMetrics, STTMetrics, TTSMetrics, VADMetrics, EOUMetrics
 
 # Configure logging
@@ -31,30 +44,81 @@ logger = logging.getLogger("pre-response-agent")
 
 load_dotenv()
 
-# Define Prometheus metrics
-LLM_LATENCY = Summary('livekit_llm_duration_ms', 'LLM latency in milliseconds', ['model'])
-STT_LATENCY = Summary('livekit_stt_duration_ms', 'Speech-to-text latency in milliseconds', ['provider'])
-TTS_LATENCY = Summary('livekit_tts_duration_ms', 'Text-to-speech latency in milliseconds', ['provider'])
-EOU_LATENCY = Summary('livekit_eou_delay_ms', 'End-of-utterance delay in milliseconds')
-TOTAL_CONVERSATION_LATENCY = Summary('livekit_total_conversation_latency_ms', 'Total conversation latency in milliseconds')
+# Set up multiprocess mode
+PROMETHEUS_MULTIPROC_DIR = '/tmp/prometheus_multiproc'
+os.environ['prometheus_multiproc_dir'] = PROMETHEUS_MULTIPROC_DIR
 
-# Usage metrics
-LLM_TOKENS = Counter('livekit_llm_tokens_total', 'Total LLM tokens processed', ['type', 'model'])
-STT_DURATION = Counter('livekit_stt_duration_seconds_total', 'Total STT audio duration in seconds', ['provider'])
-TTS_CHARS = Counter('livekit_tts_chars_total', 'Total TTS characters processed', ['provider'])
-TOTAL_TOKENS = Counter('livekit_total_tokens_total', 'Total tokens processed')
-CONVERSATION_TURNS = Counter('livekit_conversation_turns_total', 'Number of conversation turns')
-ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations')
+def cleanup_multiproc_dir():
+    """Clean up the multiprocess directory on exit."""
+    try:
+        if os.path.exists(PROMETHEUS_MULTIPROC_DIR):
+            shutil.rmtree(PROMETHEUS_MULTIPROC_DIR)
+            logger.info(f"Cleaned up multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
+    except Exception as e:
+        logger.error(f"Error cleaning up multiprocess directory: {e}")
 
-# Cost metrics
-LLM_COST = Counter('livekit_llm_cost_total', 'Total LLM cost in USD', ['model'])
-STT_COST = Counter('livekit_stt_cost_total', 'Total STT cost in USD', ['provider'])
-TTS_COST = Counter('livekit_tts_cost_total', 'Total TTS cost in USD', ['provider'])
-TOTAL_COST = Counter('livekit_total_cost_total', 'Total cost in USD')
+# Register cleanup function
+atexit.register(cleanup_multiproc_dir)
+
+# Create multiprocess directory
+try:
+    os.makedirs(PROMETHEUS_MULTIPROC_DIR, exist_ok=True)
+    logger.info(f"Created multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
+except Exception as e:
+    logger.error(f"Error creating multiprocess directory: {e}")
+
+# Create a shared registry
+registry = CollectorRegistry()
+multiprocess.MultiProcessCollector(registry)
+logger.info("Initialized multiprocess collector with shared registry")
+
+# Define Prometheus metrics with multiprocess mode
+LLM_LATENCY = Summary('livekit_llm_duration_ms', 'LLM latency in milliseconds', ['model'], registry=registry)
+STT_LATENCY = Summary('livekit_stt_duration_ms', 'Speech-to-text latency in milliseconds', ['provider'], registry=registry)
+TTS_LATENCY = Summary('livekit_tts_duration_ms', 'Text-to-speech latency in milliseconds', ['provider'], registry=registry)
+EOU_LATENCY = Summary('livekit_eou_delay_ms', 'End-of-utterance delay in milliseconds', registry=registry)
+TOTAL_CONVERSATION_LATENCY = Summary('livekit_total_conversation_latency_ms', 'Total conversation latency in milliseconds', registry=registry)
+
+# Usage metrics with multiprocess mode
+LLM_TOKENS = Counter('livekit_llm_tokens_total', 'Total LLM tokens processed', ['type', 'model'], registry=registry)
+STT_DURATION = Counter('livekit_stt_duration_seconds_total', 'Total STT audio duration in seconds', ['provider'], registry=registry)
+TTS_CHARS = Counter('livekit_tts_chars_total', 'Total TTS characters processed', ['provider'], registry=registry)
+TOTAL_TOKENS = Counter('livekit_total_tokens_total', 'Total tokens processed', registry=registry)
+CONVERSATION_TURNS = Counter('livekit_conversation_turns_total', 'Number of conversation turns', registry=registry)
+ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations', registry=registry)
+
+# Cost metrics with multiprocess mode
+LLM_COST = Counter('livekit_llm_cost_total', 'Total LLM cost in USD', ['model'], registry=registry)
+STT_COST = Counter('livekit_stt_cost_total', 'Total STT cost in USD', ['provider'], registry=registry)
+TTS_COST = Counter('livekit_tts_cost_total', 'Total TTS cost in USD', ['provider'], registry=registry)
+TOTAL_COST = Counter('livekit_total_cost_total', 'Total cost in USD', registry=registry)
+
+# Configure multiprocess mode for all metrics
+for metric in [LLM_LATENCY, STT_LATENCY, TTS_LATENCY, EOU_LATENCY, TOTAL_CONVERSATION_LATENCY,
+               LLM_TOKENS, STT_DURATION, TTS_CHARS, TOTAL_TOKENS, CONVERSATION_TURNS,
+               ACTIVE_CONVERSATIONS, LLM_COST, STT_COST, TTS_COST, TOTAL_COST]:
+    metric._multiprocess_mode = 'livesum'
+    logger.debug(f"Configured multiprocess mode for metric: {metric._name}")
+
+def log_metric_update(metric_name, old_value, new_value, labels=None):
+    """Helper function to log metric updates with detailed information."""
+    label_str = f" with labels {labels}" if labels else ""
+    logger.info(
+        f"Metric update: {metric_name}{label_str}",
+        extra={
+            "metric_name": metric_name,
+            "old_value": old_value,
+            "new_value": new_value,
+            "labels": labels,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
 
 # Initialize metrics with default values
 def initialize_metrics():
     try:
+        logger.info("Starting metrics initialization...")
+        
         # Initialize latency metrics with default labels
         LLM_LATENCY.labels(model='llama-3.3-70b').observe(0)
         STT_LATENCY.labels(provider='deepgram').observe(0)
@@ -77,8 +141,21 @@ def initialize_metrics():
         TOTAL_COST.inc(0)
         
         logger.info("Successfully initialized all metrics with default values")
+        
+        # Log initial metric values
+        logger.info("Initial metric values:")
+        for metric in registry._collector_to_names.values():
+            for name in metric:
+                try:
+                    value = registry.get_sample_value(name)
+                    if value is not None:
+                        logger.info(f"  {name}: {value}")
+                except Exception as e:
+                    logger.error(f"Error getting value for metric {name}: {e}")
+                    
     except Exception as e:
         logger.error(f"Error initializing metrics: {e}")
+        raise
 
 class PreResponseAgent(Agent):
     def __init__(self):
@@ -96,6 +173,30 @@ class PreResponseAgent(Agent):
                 "wait a moment, that's a good question, etc.",
             ],
         )
+    async def on_user_turn_completed(self, turn_ctx: ChatContext, new_message: ChatMessage):
+        # Create a short "silence filler" response to quickly acknowledge the user's input. 
+        fast_llm_ctx = turn_ctx.copy(
+            exclude_instructions=True, exclude_function_call=True
+        ).truncate(max_items=3)
+        fast_llm_ctx.items.insert(0, self._fast_llm_prompt)
+        fast_llm_ctx.items.append(new_message)
+
+        #Let LLM reply to be aware of this "silence filler" response from SLM (Small Language Model)
+        fast_llm_fut = asyncio.Future[str]()
+
+        async def _fast_llm_reply() -> AsyncIterable[str]:
+            filler_response: str = ""
+            async for chunk in self._fast_llm.chat(chat_ctx=fast_llm_ctx).to_str_iterable():
+                filler_response += chunk
+                yield chunk
+            fast_llm_fut.set_result(filler_response)
+
+        # We don't need to add this quick filler in the context
+        self.session.say(_fast_llm_reply(), add_to_chat_ctx=False)
+
+        filler_response = await fast_llm_fut
+        logger.info(f"Fast response: {filler_response}")
+        turn_ctx.add_message(role="assistant", content=filler_response, interrupted=False)
 
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
@@ -116,19 +217,19 @@ async def entrypoint(ctx: JobContext):
             # 1. eou_delay: Time from user stops speaking to end-of-utterance detection. This includes transcription_delay
             # 2. llm_ttft: Time to first token from LLM (Time To First Token)
             # 3. tts_ttfb: Time to first byte from TTS (Time To First Byte)
-            total_ms = (current_turn_metrics['eou_delay'] + current_turn_metrics['llm_ttft'] + current_turn_metrics['tts_ttfb']) * 1000
+            total_ms = int((current_turn_metrics['eou_delay'] + current_turn_metrics['llm_ttft'] + current_turn_metrics['tts_ttfb']) * 1000)
             
             # Log individual components for debugging
-            logger.debug(f"Latency components (ms): EOU={current_turn_metrics['eou_delay']*1000:.2f}, "
-                        f"LLM={current_turn_metrics['llm_ttft']*1000:.2f}, "
-                        f"TTS={current_turn_metrics['tts_ttfb']*1000:.2f}")
+            logger.debug(f"Latency components (ms): EOU={int(current_turn_metrics['eou_delay']*1000)}, "
+                        f"LLM={int(current_turn_metrics['llm_ttft']*1000)}, "
+                        f"TTS={int(current_turn_metrics['tts_ttfb']*1000)}")
             
             try:
                 # Log previous metric values
                 prev_count = TOTAL_CONVERSATION_LATENCY._count.get()
                 prev_sum = TOTAL_CONVERSATION_LATENCY._sum.get()
                 
-                # Ensure the metric is properly observed
+                # Ensure the metric is properly observed with integer value
                 TOTAL_CONVERSATION_LATENCY.observe(total_ms)
                 
                 # Log metric changes
@@ -152,9 +253,9 @@ async def entrypoint(ctx: JobContext):
                 "Total Conversation Latency",
                 extra={
                     "total_latency_ms": total_ms,
-                    "eou_delay_ms": current_turn_metrics['eou_delay'] * 1000,
-                    "llm_ttft_ms": current_turn_metrics['llm_ttft'] * 1000,
-                    "tts_ttfb_ms": current_turn_metrics['tts_ttfb'] * 1000,
+                    "eou_delay_ms": int(current_turn_metrics['eou_delay'] * 1000),
+                    "llm_ttft_ms": int(current_turn_metrics['llm_ttft'] * 1000),
+                    "tts_ttfb_ms": int(current_turn_metrics['tts_ttfb'] * 1000),
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
@@ -381,6 +482,7 @@ async def entrypoint(ctx: JobContext):
 
     # Register metrics handler before starting the session
     logger.info("Registering metrics handler")
+    #start the agent session
     await session.start(PreResponseAgent(), room=ctx.room)
     ctx.add_shutdown_callback(log_usage)
 
@@ -392,7 +494,7 @@ if __name__ == "__main__":
         
         # Start up the server to expose the metrics.
         logger.info("Starting Prometheus metrics server on port 9100...")
-        start_http_server(9100, addr='0.0.0.0')
+        start_http_server(9100, addr='0.0.0.0', registry=registry)
         logger.info("Prometheus metrics server started successfully")
         
         # Verify metrics are accessible and contain our custom metrics
@@ -423,3 +525,6 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Error starting application: {e}")
         raise
+    finally:
+        # Ensure cleanup happens even if there's an error
+        cleanup_multiproc_dir()
