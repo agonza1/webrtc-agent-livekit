@@ -87,13 +87,14 @@ services:
       - "host.docker.internal:host-gateway"
     command:
       - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--log.level=debug'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
 
   grafana:
-    image: grafana/grafana:9.5.2
+    image: grafana/grafana
     container_name: grafana
     ports:
       - "3001:3000"
