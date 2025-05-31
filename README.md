@@ -42,3 +42,10 @@ NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880 #wss://<Your Cloud URL>
 5. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 6. Connect to a room
+
+## Monitoring
+
+[Agent Worker](./agent-worker/) Metrics are exposed on port 9100 and can be accessed at:
+```
+http://localhost:9100/metrics
+```
