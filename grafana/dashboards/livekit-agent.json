@@ -32,13 +32,13 @@
               "tooltip": false,
               "viz": false
             },
-            "lineInterpolation": "smooth",
+            "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "always",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -79,7 +79,7 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": ["mean", "max", "p95"],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -95,7 +95,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(livekit_llm_duration_ms_sum[5m]) / rate(livekit_llm_duration_ms_count[5m])",
+          "expr": "livekit_llm_duration_ms",
+          "instant": true,
           "legendFormat": "LLM Latency",
           "refId": "A"
         },
@@ -104,7 +105,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(livekit_stt_duration_ms_sum[5m]) / rate(livekit_stt_duration_ms_count[5m])",
+          "expr": "livekit_stt_duration_ms",
+          "instant": true,
           "legendFormat": "STT Latency",
           "refId": "B"
         },
@@ -113,9 +115,20 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(livekit_tts_duration_ms_sum[5m]) / rate(livekit_tts_duration_ms_count[5m])",
+          "expr": "livekit_tts_duration_ms",
+          "instant": true,
           "legendFormat": "TTS Latency",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "livekit_total_conversation_latency_ms",
+          "instant": true,
+          "legendFormat": "Total Conversation Latency",
+          "refId": "D"
         }
       ],
       "title": "Response Latency",
@@ -137,7 +150,7 @@
             "axisLabel": "Count",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
+            "drawStyle": "line",
             "fillOpacity": 70,
             "gradientMode": "opacity",
             "hideFrom": {
@@ -151,7 +164,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "always",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -183,7 +196,7 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": ["sum", "max"],
+          "calcs": ["lastNotNull"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -199,8 +212,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(livekit_total_tokens[5m])",
-          "legendFormat": "Tokens/sec",
+          "expr": "livekit_llm_tokens_total",
+          "instant": true,
+          "legendFormat": "LLM Tokens",
           "refId": "A"
         },
         {
@@ -208,12 +222,23 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(livekit_conversation_turns[5m])",
-          "legendFormat": "Turns/sec",
+          "expr": "livekit_stt_duration_seconds_total",
+          "instant": true,
+          "legendFormat": "STT Duration",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "livekit_tts_chars_total",
+          "instant": true,
+          "legendFormat": "TTS Characters",
+          "refId": "C"
         }
       ],
-      "title": "Usage Rate",
+      "title": "Usage Metrics",
       "type": "timeseries"
     },
     {
@@ -275,6 +300,7 @@
             "uid": "prometheus"
           },
           "expr": "livekit_active_conversations",
+          "instant": true,
           "legendFormat": "Active Conversations",
           "refId": "A"
         }
@@ -302,7 +328,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "ms"
         },
         "overrides": []
       },
@@ -315,7 +341,7 @@
       "id": 4,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -332,12 +358,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "livekit_total_tokens",
-          "legendFormat": "Total Tokens",
+          "expr": "max(livekit_total_conversation_latency_ms)",
+          "instant": true,
+          "legendFormat": "Max Total Conversation Exchange Latency",
           "refId": "A"
         }
       ],
-      "title": "Total Tokens",
+      "title": "Current Total Latency",
       "type": "stat"
     },
     {
@@ -360,7 +387,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "currencyUSD"
         },
         "overrides": []
       },
@@ -373,7 +400,7 @@
       "id": 5,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -390,12 +417,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "livekit_conversation_turns",
-          "legendFormat": "Total Turns",
+          "expr": "livekit_total_cost_total",
+          "instant": true,
+          "legendFormat": "Total Cost",
           "refId": "A"
         }
       ],
-      "title": "Total Conversation Turns",
+      "title": "Total Cost",
       "type": "stat"
     },
     {
@@ -431,7 +459,7 @@
       "id": 6,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -448,12 +476,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(livekit_llm_duration_ms_sum[5m]) / rate(livekit_llm_duration_ms_count[5m])",
-          "legendFormat": "Current LLM Latency",
+          "expr": "livekit_eou_delay_ms",
+          "instant": true,
+          "legendFormat": "EOU Delay",
           "refId": "A"
         }
       ],
-      "title": "Current LLM Latency",
+      "title": "End of Utterance Delay",
       "type": "stat"
     }
   ],

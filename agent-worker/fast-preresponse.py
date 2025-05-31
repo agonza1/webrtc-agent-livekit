@@ -29,9 +29,7 @@ from prometheus_client import (
     Counter, 
     Gauge, 
     CollectorRegistry, 
-    multiprocess, 
-    generate_latest,
-    CONTENT_TYPE_LATEST
+    multiprocess
 )
 from livekit.agents.metrics import LLMMetrics, STTMetrics, TTSMetrics, VADMetrics, EOUMetrics
 
@@ -56,7 +54,6 @@ def cleanup_multiproc_dir():
             logger.info(f"Cleaned up multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
     except Exception as e:
         logger.error(f"Error cleaning up multiprocess directory: {e}")
-
 # Register cleanup function
 atexit.register(cleanup_multiproc_dir)
 
@@ -73,11 +70,11 @@ multiprocess.MultiProcessCollector(registry)
 logger.info("Initialized multiprocess collector with shared registry")
 
 # Define Prometheus metrics with multiprocess mode
-LLM_LATENCY = Summary('livekit_llm_duration_ms', 'LLM latency in milliseconds', ['model'], registry=registry)
-STT_LATENCY = Summary('livekit_stt_duration_ms', 'Speech-to-text latency in milliseconds', ['provider'], registry=registry)
-TTS_LATENCY = Summary('livekit_tts_duration_ms', 'Text-to-speech latency in milliseconds', ['provider'], registry=registry)
-EOU_LATENCY = Summary('livekit_eou_delay_ms', 'End-of-utterance delay in milliseconds', registry=registry)
-TOTAL_CONVERSATION_LATENCY = Summary('livekit_total_conversation_latency_ms', 'Total conversation latency in milliseconds', registry=registry)
+LLM_LATENCY = Gauge('livekit_llm_duration_ms', 'LLM latency in milliseconds', ['model'], registry=registry)
+STT_LATENCY = Gauge('livekit_stt_duration_ms', 'Speech-to-text latency in milliseconds', ['provider'], registry=registry)
+TTS_LATENCY = Gauge('livekit_tts_duration_ms', 'Text-to-speech latency in milliseconds', ['provider'], registry=registry)
+EOU_LATENCY = Gauge('livekit_eou_delay_ms', 'End-of-utterance delay in milliseconds', registry=registry)
+TOTAL_CONVERSATION_LATENCY = Gauge('livekit_total_conversation_latency_ms', 'Current conversation latency in milliseconds', registry=registry)
 
 # Usage metrics with multiprocess mode
 LLM_TOKENS = Counter('livekit_llm_tokens_total', 'Total LLM tokens processed', ['type', 'model'], registry=registry)
@@ -93,12 +90,11 @@ STT_COST = Counter('livekit_stt_cost_total', 'Total STT cost in USD', ['provider
 TTS_COST = Counter('livekit_tts_cost_total', 'Total TTS cost in USD', ['provider'], registry=registry)
 TOTAL_COST = Counter('livekit_total_cost_total', 'Total cost in USD', registry=registry)
 
-# Configure multiprocess mode for all metrics
-for metric in [LLM_LATENCY, STT_LATENCY, TTS_LATENCY, EOU_LATENCY, TOTAL_CONVERSATION_LATENCY,
-               LLM_TOKENS, STT_DURATION, TTS_CHARS, TOTAL_TOKENS, CONVERSATION_TURNS,
-               ACTIVE_CONVERSATIONS, LLM_COST, STT_COST, TTS_COST, TOTAL_COST]:
+# Configure multiprocess mode only for counters
+for metric in [LLM_TOKENS, STT_DURATION, TTS_CHARS, TOTAL_TOKENS, CONVERSATION_TURNS,
+               LLM_COST, STT_COST, TTS_COST, TOTAL_COST]:
     metric._multiprocess_mode = 'livesum'
-    logger.debug(f"Configured multiprocess mode for metric: {metric._name}")
+    logger.debug(f"Configured multiprocess mode for counter: {metric._name}")
 
 def log_metric_update(metric_name, old_value, new_value, labels=None):
     """Helper function to log metric updates with detailed information."""
@@ -120,11 +116,11 @@ def initialize_metrics():
         logger.info("Starting metrics initialization...")
         
         # Initialize latency metrics with default labels
-        LLM_LATENCY.labels(model='llama-3.3-70b').observe(0)
-        STT_LATENCY.labels(provider='deepgram').observe(0)
-        TTS_LATENCY.labels(provider='openai').observe(0)
-        EOU_LATENCY.observe(0)
-        TOTAL_CONVERSATION_LATENCY.observe(0)
+        LLM_LATENCY.labels(model='llama-3.3-70b').set(0)
+        STT_LATENCY.labels(provider='deepgram').set(0)
+        TTS_LATENCY.labels(provider='openai').set(0)
+        EOU_LATENCY.set(0)
+        TOTAL_CONVERSATION_LATENCY.set(0)
         
         # Initialize token counters
         LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b').inc(0)
@@ -202,7 +198,7 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
     # Initialize metrics at startup
-    initialize_metrics()
+    # initialize_metrics()
 
     # Store component latencies for total latency calculation
     current_turn_metrics = {
@@ -225,29 +221,23 @@ async def entrypoint(ctx: JobContext):
                         f"TTS={int(current_turn_metrics['tts_ttfb']*1000)}")
             
             try:
-                # Log previous metric values
-                prev_count = TOTAL_CONVERSATION_LATENCY._count.get()
-                prev_sum = TOTAL_CONVERSATION_LATENCY._sum.get()
+                # Get previous value for logging
+                prev_value = TOTAL_CONVERSATION_LATENCY._value.get()
                 
-                # Ensure the metric is properly observed with integer value
-                TOTAL_CONVERSATION_LATENCY.observe(total_ms)
+                # Set the current latency value
+                TOTAL_CONVERSATION_LATENCY.set(total_ms)
                 
-                # Log metric changes
-                new_count = TOTAL_CONVERSATION_LATENCY._count.get()
-                new_sum = TOTAL_CONVERSATION_LATENCY._sum.get()
+                # Log the update
                 logger.info(
                     "Updated total conversation latency metric",
                     extra={
-                        "previous_count": prev_count,
-                        "new_count": new_count,
-                        "previous_sum": prev_sum,
-                        "new_sum": new_sum,
+                        "previous_value_ms": prev_value,
                         "current_value_ms": total_ms,
                         "timestamp": datetime.utcnow().isoformat()
                     }
                 )
             except Exception as e:
-                logger.error(f"Error observing latency metric: {e}")
+                logger.error(f"Error updating latency metric: {e}")
             
             logger.info(
                 "Total Conversation Latency",
@@ -345,7 +335,7 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing LLM metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                LLM_LATENCY.labels(model='llama-3.3-70b').observe(duration_ms)
+                LLM_LATENCY.labels(model='llama-3.3-70b').set(duration_ms)
                 logger.debug(f"Observed LLM latency: {duration_ms}ms")
             if hasattr(ev.metrics, 'ttft'):
                 current_turn_metrics['llm_ttft'] = ev.metrics.ttft
@@ -365,7 +355,7 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing STT metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                STT_LATENCY.labels(provider='deepgram').observe(duration_ms)
+                STT_LATENCY.labels(provider='deepgram').set(duration_ms)
                 logger.debug(f"Observed STT latency: {duration_ms}ms")
                 logger.info(
                     "STT Metrics",
@@ -379,7 +369,7 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing TTS metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                TTS_LATENCY.labels(provider='openai').observe(duration_ms)
+                TTS_LATENCY.labels(provider='openai').set(duration_ms)
                 logger.debug(f"Observed TTS latency: {duration_ms}ms")
             if hasattr(ev.metrics, 'ttfb'):
                 current_turn_metrics['tts_ttfb'] = ev.metrics.ttfb
@@ -408,7 +398,7 @@ async def entrypoint(ctx: JobContext):
             # Convert seconds to milliseconds for consistency with other metrics
             if hasattr(ev.metrics, 'end_of_utterance_delay'):
                 delay_ms = ev.metrics.end_of_utterance_delay * 1000
-                EOU_LATENCY.observe(delay_ms)
+                EOU_LATENCY.set(delay_ms)
                 logger.debug(f"Observed EOU delay: {delay_ms}ms")
                 current_turn_metrics['eou_delay'] = ev.metrics.end_of_utterance_delay
                 calculate_total_latency()
