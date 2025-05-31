@@ -69,7 +69,7 @@ services:
   #   volumes:
   #     - ./agent-worker:/app
   #   env_file:
-  #     - ./agent-worker.yaml
+  #     - ./ag-worker.yaml
   #   depends_on:
   #     - livekit
   #   networks:
