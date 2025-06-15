@@ -98,7 +98,7 @@ STT_DURATION = Counter('livekit_stt_duration_seconds_total', 'Total STT audio du
 TTS_CHARS = Counter('livekit_tts_chars_total', 'Total TTS characters processed', ['provider'], registry=registry)
 TOTAL_TOKENS = Counter('livekit_total_tokens_total', 'Total tokens processed', registry=registry)
 CONVERSATION_TURNS = Counter('livekit_conversation_turns_total', 'Number of conversation turns', registry=registry)
-ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations', multiprocess_mode='liveall', registry=registry)
+ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations', ['agent_type'], multiprocess_mode='liveall', registry=registry)
 
 # Cost metrics with multiprocess mode
 LLM_COST = Counter('livekit_llm_cost_total', 'Total LLM cost in USD', ['model'], registry=registry)
@@ -277,8 +277,8 @@ async def entrypoint(ctx: JobContext):
     )
     
     usage_collector = metrics.UsageCollector()
-    ACTIVE_CONVERSATIONS.inc()
-    atexit.register(lambda: ACTIVE_CONVERSATIONS.dec())
+    ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse').inc()
+    atexit.register(lambda: ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse').dec())
     logger.info("Session initialized with metrics collector")
 
     @session.on("metrics_collected")
@@ -478,14 +478,14 @@ async def entrypoint(ctx: JobContext):
                 "Session Summary",
                 extra={
                     "usage_summary": json.dumps(summary_dict),
-                    "active_conversations": ACTIVE_CONVERSATIONS._value.get(),
+                    "active_conversations": ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse')._value.get(),
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
         except Exception as e:
             logger.error(f"Error getting usage summary: {e}")
         finally:
-            ACTIVE_CONVERSATIONS.dec()
+            ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse').dec()
 
     # Register metrics handler before starting the session
     logger.info("Registering metrics handler")

@@ -1,4 +1,6 @@
-LIVEKIT_URL=ws://livekit:7880/ws
+#You can use this YAML file to set the environment variables for the agent-worker service in prod, justu pdate the env of the agent-worker and you are good to go.
+#Now it is using ./env directly in agent-worker/
+LIVEKIT_URL=ws://livekit:7880
 LIVEKIT_API_KEY=APIQVsuCZRvdWEe
 LIVEKIT_API_SECRET=I6LCHJfE8OBA9D5yAqYhWMBYa1crCmHumfnUNJaLxRD
 OPENAI_API_KEY=your_openai_api_key_here

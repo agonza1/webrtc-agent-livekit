@@ -70,12 +70,12 @@ services:
       - ./agent-worker:/app
       - prom_data:/tmp/prometheus_multiproc
     env_file:
-      - ./agent-worker.yaml
+      - ./agent-worker/.env
     depends_on:
       - livekit
     networks:
       - lknetwork
-  agent_metrics:
+  agent-metrics:
     build: ./agent-metrics
     ports:
       - "9100:9100"

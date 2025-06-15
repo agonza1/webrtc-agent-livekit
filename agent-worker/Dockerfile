@@ -21,5 +21,12 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 
+# Set Prometheus directory for multiprocess metrics
+ENV PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
+RUN mkdir -p ${PROMETHEUS_MULTIPROC_DIR}
+
+# Download model files
+RUN python fast-preresponse.py download-files || true
+
 # Run the application
 CMD ["python", "fast-preresponse.py", "dev"]
