@@ -1,0 +1,6 @@
+LIVEKIT_URL=ws://livekit:7880/ws
+LIVEKIT_API_KEY=APIQVsuCZRvdWEe
+LIVEKIT_API_SECRET=I6LCHJfE8OBA9D5yAqYhWMBYa1crCmHumfnUNJaLxRD
+OPENAI_API_KEY=your_openai_api_key_here
+DEEPGRAM_API_KEY=your_deepgram_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
