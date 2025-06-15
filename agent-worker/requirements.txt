@@ -2,8 +2,6 @@ annotated-types
 python-dotenv
 livekit
 livekit-agents[openai,groq,silero,deepgram,turn-detector]~=1.0
-# livekit-plugins-deepgram
-# livekit-plugins-openai
-# livekit-plugins-silero
 typing
 colorlog
+prometheus_client

@@ -38,6 +38,7 @@ NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880 #wss://<Your Cloud URL>
 ```bash
   docker compose up --build
 ```
+Make sure that at least the services "agent-playground", "agent-worker", "livekit" and "redis" in the docker-compose are uncommented.
 
 5. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
@@ -45,7 +46,13 @@ NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880 #wss://<Your Cloud URL>
 
 ## Monitoring
 
+The solution is build using Prometheus and grafana. The end to end flow is:
+Agent worker → writes metrics to shared temp folder → agent_metrics exposes them → Prometheus scrapes them → Grafana displays them.
+
 [Agent Worker](./agent-worker/) Metrics are exposed on port 9100 and can be accessed at:
 ```
 http://localhost:9100/metrics
 ```
+
+Grafana is available in [http://localhost:3001](http://localhost:3001) with default user/password: admin/admin
+A default dashboard is setup to visualize basic real time voice agents information.

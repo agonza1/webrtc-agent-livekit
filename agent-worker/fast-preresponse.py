@@ -5,6 +5,8 @@ import os
 import shutil
 import atexit
 import time
+import signal
+import sys
 from collections.abc import AsyncIterable
 from datetime import datetime
 
@@ -46,23 +48,37 @@ load_dotenv()
 PROMETHEUS_MULTIPROC_DIR = '/tmp/prometheus_multiproc'
 os.environ['prometheus_multiproc_dir'] = PROMETHEUS_MULTIPROC_DIR
 
-def cleanup_multiproc_dir():
-    """Clean up the multiprocess directory on exit."""
-    try:
-        if os.path.exists(PROMETHEUS_MULTIPROC_DIR):
-            shutil.rmtree(PROMETHEUS_MULTIPROC_DIR)
-            logger.info(f"Cleaned up multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
-    except Exception as e:
-        logger.error(f"Error cleaning up multiprocess directory: {e}")
-# Register cleanup function
-atexit.register(cleanup_multiproc_dir)
+# def cleanup_multiproc_dir():
+#     """Clean up the multiprocess directory on exit."""
+#     try:
+#         if os.path.exists(PROMETHEUS_MULTIPROC_DIR):
+#             shutil.rmtree(PROMETHEUS_MULTIPROC_DIR)
+#             logger.info(f"Cleaned up multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
+#     except Exception as e:
+#         logger.error(f"Error cleaning up multiprocess directory: {e}")
+# # Register cleanup function
+# atexit.register(cleanup_multiproc_dir)
 
-# Create multiprocess directory
-try:
-    os.makedirs(PROMETHEUS_MULTIPROC_DIR, exist_ok=True)
-    logger.info(f"Created multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
-except Exception as e:
-    logger.error(f"Error creating multiprocess directory: {e}")
+# # Register signal handlers for cleanup
+# def handle_exit(sig, frame):
+#     logger.info(f"Received signal {sig}, cleaning up and decrementing active conversations")
+#     try:
+#         ACTIVE_CONVERSATIONS.dec()
+#     except Exception as e:
+#         logger.error(f"Error decrementing ACTIVE_CONVERSATIONS in signal handler: {e}")
+#     finally:
+#         cleanup_multiproc_dir()
+#         sys.exit(0)
+
+# signal.signal(signal.SIGTERM, handle_exit)
+# signal.signal(signal.SIGINT, handle_exit)
+
+# # Create multiprocess directory
+# try:
+#     os.makedirs(PROMETHEUS_MULTIPROC_DIR, exist_ok=True)
+#     logger.info(f"Created multiprocess directory: {PROMETHEUS_MULTIPROC_DIR}")
+# except Exception as e:
+#     logger.error(f"Error creating multiprocess directory: {e}")
 
 # Create a shared registry
 registry = CollectorRegistry()
@@ -82,7 +98,7 @@ STT_DURATION = Counter('livekit_stt_duration_seconds_total', 'Total STT audio du
 TTS_CHARS = Counter('livekit_tts_chars_total', 'Total TTS characters processed', ['provider'], registry=registry)
 TOTAL_TOKENS = Counter('livekit_total_tokens_total', 'Total tokens processed', registry=registry)
 CONVERSATION_TURNS = Counter('livekit_conversation_turns_total', 'Number of conversation turns', registry=registry)
-ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations', registry=registry)
+ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations', multiprocess_mode='liveall', registry=registry)
 
 # Cost metrics with multiprocess mode
 LLM_COST = Counter('livekit_llm_cost_total', 'Total LLM cost in USD', ['model'], registry=registry)
@@ -262,6 +278,7 @@ async def entrypoint(ctx: JobContext):
     
     usage_collector = metrics.UsageCollector()
     ACTIVE_CONVERSATIONS.inc()
+    atexit.register(lambda: ACTIVE_CONVERSATIONS.dec())
     logger.info("Session initialized with metrics collector")
 
     @session.on("metrics_collected")
@@ -482,33 +499,33 @@ if __name__ == "__main__":
         # Initialize metrics before starting the server
         initialize_metrics()
         
-        # Start up the server to expose the metrics.
-        logger.info("Starting Prometheus metrics server on port 9100...")
-        start_http_server(9100, addr='0.0.0.0', registry=registry)
-        logger.info("Prometheus metrics server started successfully")
+        # Start up the server to expose the metrics. This is not needed anymore since we are using the agent-metrics service.
+        # logger.info("Starting Prometheus metrics server on port 9100...")
+        # start_http_server(9100, addr='0.0.0.0', registry=registry)
+        # logger.info("Prometheus metrics server started successfully")
         
         # Verify metrics are accessible and contain our custom metrics
-        import requests
-        try:
-            response = requests.get('http://localhost:9100/metrics')
-            if response.status_code == 200:
-                logger.info("Successfully verified metrics endpoint is accessible")
-                # Log available metrics
-                metrics_list = [line for line in response.text.split('\n') if line and not line.startswith('#')]
-                logger.info(f"Available metrics on endpoint: {len(metrics_list)}")
+        # import requests
+        # try:
+        #     response = requests.get('http://localhost:9100/metrics')
+        #     if response.status_code == 200:
+        #         logger.info("Successfully verified metrics endpoint is accessible")
+        #         # Log available metrics
+        #         metrics_list = [line for line in response.text.split('\n') if line and not line.startswith('#')]
+        #         logger.info(f"Available metrics on endpoint: {len(metrics_list)}")
                 
-                # Check for our custom metrics
-                custom_metrics = [m for m in metrics_list if m.startswith('livekit_')]
-                logger.info(f"Found {len(custom_metrics)} custom metrics:")
-                for metric in custom_metrics:
-                    logger.info(f"Custom metric: {metric}")
+        #         # Check for our custom metrics
+        #         custom_metrics = [m for m in metrics_list if m.startswith('livekit_')]
+        #         logger.info(f"Found {len(custom_metrics)} custom metrics:")
+        #         for metric in custom_metrics:
+        #             logger.info(f"Custom metric: {metric}")
                 
-                if not custom_metrics:
-                    logger.error("No custom metrics found in the metrics endpoint!")
-            else:
-                logger.error(f"Metrics endpoint returned status code: {response.status_code}")
-        except Exception as e:
-            logger.error(f"Error accessing metrics endpoint: {e}")
+        #         if not custom_metrics:
+        #             logger.error("No custom metrics found in the metrics endpoint!")
+        #     else:
+        #         logger.error(f"Metrics endpoint returned status code: {response.status_code}")
+        # except Exception as e:
+        #     logger.error(f"Error accessing metrics endpoint: {e}")
         
         # Initialize the agent
         cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))

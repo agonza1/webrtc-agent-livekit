@@ -62,18 +62,27 @@ services:
       - livekit
     networks:
       - lknetwork
-  # agent-worker:
-  #   build:
-  #     context: ./agent-worker
-  #     dockerfile: Dockerfile
-  #   volumes:
-  #     - ./agent-worker:/app
-  #   env_file:
-  #     - ./agent-worker.yaml
-  #   depends_on:
-  #     - livekit
-  #   networks:
-  #     - lknetwork
+  agent-worker:
+    build:
+      context: ./agent-worker
+      dockerfile: Dockerfile
+    volumes:
+      - ./agent-worker:/app
+      - prom_data:/tmp/prometheus_multiproc
+    env_file:
+      - ./agent-worker.yaml
+    depends_on:
+      - livekit
+    networks:
+      - lknetwork
+  agent_metrics:
+    build: ./agent-metrics
+    ports:
+      - "9100:9100"
+    volumes:
+      - prom_data:/tmp/prometheus_multiproc
+    networks:
+      - lknetwork
   prometheus:
     image: prom/prometheus
     container_name: prometheus
@@ -81,6 +90,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+      - prom_data:/tmp/prometheus_multiproc
     networks:
       - lknetwork
     extra_hosts:
@@ -139,3 +149,4 @@ services:
 
 volumes:
   grafana-data:
+  prom_data:

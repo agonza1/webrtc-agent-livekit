@@ -8,6 +8,41 @@ This example uses Llama 3.1 8B and 70B. Initial quick response comes from 8B to 
 
 Same idea but using Ollama instead of Groq
 
+## Run with Docker
+
+1. Build the Docker image:
+```bash
+docker build -t agent-worker .
+```
+
+2. Create a `.env` file with your API keys like in .env.example
+
+3. Run the container:
+```bash
+docker run --env-file .env -p 9100:9100 agent-worker
+```
+
+## Run without Docker with conda
+
+1. Create and activate a conda environment:
+```bash
+conda create -n agent-worker python=3.10
+conda activate agent-worker
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Create a `.env` file with your API keys (same as Docker setup)
+
+4. Run the agent:
+```bash
+python fast-preresponse.py
+```
+
+
 ## Architecture
 
 ```mermaid

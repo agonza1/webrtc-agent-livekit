@@ -300,8 +300,8 @@
             "uid": "prometheus"
           },
           "expr": "livekit_active_conversations",
-          "instant": true,
-          "legendFormat": "Active Conversations",
+          "instant": false,
+          "legendFormat": "Current Active Conversations",
           "refId": "A"
         }
       ],
