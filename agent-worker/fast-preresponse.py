@@ -80,17 +80,20 @@ os.environ['prometheus_multiproc_dir'] = PROMETHEUS_MULTIPROC_DIR
 # except Exception as e:
 #     logger.error(f"Error creating multiprocess directory: {e}")
 
+# Get the current file name without extension
+AGENT_TYPE = os.path.splitext(os.path.basename(__file__))[0]
+
 # Create a shared registry
 registry = CollectorRegistry()
 multiprocess.MultiProcessCollector(registry)
 logger.info("Initialized multiprocess collector with shared registry")
 
 # Define Prometheus metrics with multiprocess mode
-LLM_LATENCY = Gauge('livekit_llm_duration_ms', 'LLM latency in milliseconds', ['model'], registry=registry)
-STT_LATENCY = Gauge('livekit_stt_duration_ms', 'Speech-to-text latency in milliseconds', ['provider'], registry=registry)
-TTS_LATENCY = Gauge('livekit_tts_duration_ms', 'Text-to-speech latency in milliseconds', ['provider'], registry=registry)
-EOU_LATENCY = Gauge('livekit_eou_delay_ms', 'End-of-utterance delay in milliseconds', registry=registry)
-TOTAL_CONVERSATION_LATENCY = Gauge('livekit_total_conversation_latency_ms', 'Current conversation latency in milliseconds', registry=registry)
+LLM_LATENCY = Gauge('livekit_llm_duration_ms', 'LLM latency in milliseconds', ['model', 'agent_type'], registry=registry)
+STT_LATENCY = Gauge('livekit_stt_duration_ms', 'Speech-to-text latency in milliseconds', ['provider', 'agent_type'], registry=registry)
+TTS_LATENCY = Gauge('livekit_tts_duration_ms', 'Text-to-speech latency in milliseconds', ['provider', 'agent_type'], registry=registry)
+EOU_LATENCY = Gauge('livekit_eou_delay_ms', 'End-of-utterance delay in milliseconds', ['agent_type'], registry=registry)
+TOTAL_CONVERSATION_LATENCY = Gauge('livekit_total_conversation_latency_ms', 'Current conversation latency in milliseconds', ['agent_type'], registry=registry)
 
 # Usage metrics with multiprocess mode
 LLM_TOKENS = Counter('livekit_llm_tokens_total', 'Total LLM tokens processed', ['type', 'model'], registry=registry)
@@ -101,16 +104,19 @@ CONVERSATION_TURNS = Counter('livekit_conversation_turns_total', 'Number of conv
 ACTIVE_CONVERSATIONS = Gauge('livekit_active_conversations', 'Number of active conversations', ['agent_type'], multiprocess_mode='liveall', registry=registry)
 
 # Cost metrics with multiprocess mode
-LLM_COST = Counter('livekit_llm_cost_total', 'Total LLM cost in USD', ['model'], registry=registry)
-STT_COST = Counter('livekit_stt_cost_total', 'Total STT cost in USD', ['provider'], registry=registry)
-TTS_COST = Counter('livekit_tts_cost_total', 'Total TTS cost in USD', ['provider'], registry=registry)
-TOTAL_COST = Counter('livekit_total_cost_total', 'Total cost in USD', registry=registry)
+LLM_COST = Gauge('livekit_llm_cost_total', 'Total LLM cost in USD', ['model'], registry=registry)
+STT_COST = Gauge('livekit_stt_cost_total', 'Total STT cost in USD', ['provider'], registry=registry)
+TTS_COST = Gauge('livekit_tts_cost_total', 'Total TTS cost in USD', ['provider'], registry=registry)
 
-# Configure multiprocess mode only for counters
-for metric in [LLM_TOKENS, STT_DURATION, TTS_CHARS, TOTAL_TOKENS, CONVERSATION_TURNS,
-               LLM_COST, STT_COST, TTS_COST, TOTAL_COST]:
+# Configure multiprocess mode for usage counters
+for metric in [LLM_TOKENS, STT_DURATION, TTS_CHARS, TOTAL_TOKENS, CONVERSATION_TURNS]:
     metric._multiprocess_mode = 'livesum'
     logger.debug(f"Configured multiprocess mode for counter: {metric._name}")
+
+# Configure cost metrics to use liveall mode for single aggregated value
+for metric in [LLM_COST, STT_COST, TTS_COST]:
+    metric._multiprocess_mode = 'liveall'
+    logger.debug(f"Configured multiprocess mode for cost metric: {metric._name}")
 
 def log_metric_update(metric_name, old_value, new_value, labels=None):
     """Helper function to log metric updates with detailed information."""
@@ -132,11 +138,11 @@ def initialize_metrics():
         logger.info("Starting metrics initialization...")
         
         # Initialize latency metrics with default labels
-        LLM_LATENCY.labels(model='llama-3.3-70b').set(0)
-        STT_LATENCY.labels(provider='deepgram').set(0)
-        TTS_LATENCY.labels(provider='openai').set(0)
-        EOU_LATENCY.set(0)
-        TOTAL_CONVERSATION_LATENCY.set(0)
+        LLM_LATENCY.labels(model='llama-3.3-70b', agent_type=AGENT_TYPE).set(0)
+        STT_LATENCY.labels(provider='deepgram', agent_type=AGENT_TYPE).set(0)
+        TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(0)
+        EOU_LATENCY.labels(agent_type=AGENT_TYPE).set(0)
+        TOTAL_CONVERSATION_LATENCY.labels(agent_type=AGENT_TYPE).set(0)
         
         # Initialize token counters
         LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b').inc(0)
@@ -150,7 +156,6 @@ def initialize_metrics():
         LLM_COST.labels(model='llama-3.3-70b').inc(0)
         STT_COST.labels(provider='deepgram').inc(0)
         TTS_COST.labels(provider='openai').inc(0)
-        TOTAL_COST.inc(0)
         
         logger.info("Successfully initialized all metrics with default values")
         
@@ -229,19 +234,26 @@ async def entrypoint(ctx: JobContext):
             # 1. eou_delay: Time from user stops speaking to end-of-utterance detection. This includes transcription_delay
             # 2. llm_ttft: Time to first token from LLM (Time To First Token)
             # 3. tts_ttfb: Time to first byte from TTS (Time To First Byte)
-            total_ms = int((current_turn_metrics['eou_delay'] + current_turn_metrics['llm_ttft'] + current_turn_metrics['tts_ttfb']) * 1000)
+            
+            # Convert all values to milliseconds before adding
+            eou_ms = current_turn_metrics['eou_delay'] * 1000
+            llm_ms = current_turn_metrics['llm_ttft'] * 1000
+            tts_ms = current_turn_metrics['tts_ttfb'] * 1000
+            
+            # Calculate total in milliseconds
+            total_ms = int(eou_ms + llm_ms + tts_ms)
             
             # Log individual components for debugging
-            logger.debug(f"Latency components (ms): EOU={int(current_turn_metrics['eou_delay']*1000)}, "
-                        f"LLM={int(current_turn_metrics['llm_ttft']*1000)}, "
-                        f"TTS={int(current_turn_metrics['tts_ttfb']*1000)}")
+            logger.debug(f"Latency components (ms): EOU={int(eou_ms)}, "
+                        f"LLM={int(llm_ms)}, "
+                        f"TTS={int(tts_ms)}")
             
             try:
                 # Get previous value for logging
-                prev_value = TOTAL_CONVERSATION_LATENCY._value.get()
+                prev_value = TOTAL_CONVERSATION_LATENCY.labels(agent_type=AGENT_TYPE)._value.get()
                 
                 # Set the current latency value
-                TOTAL_CONVERSATION_LATENCY.set(total_ms)
+                TOTAL_CONVERSATION_LATENCY.labels(agent_type=AGENT_TYPE).set(total_ms)
                 
                 # Log the update
                 logger.info(
@@ -259,9 +271,9 @@ async def entrypoint(ctx: JobContext):
                 "Total Conversation Latency",
                 extra={
                     "total_latency_ms": total_ms,
-                    "eou_delay_ms": int(current_turn_metrics['eou_delay'] * 1000),
-                    "llm_ttft_ms": int(current_turn_metrics['llm_ttft'] * 1000),
-                    "tts_ttfb_ms": int(current_turn_metrics['tts_ttfb'] * 1000),
+                    "eou_delay_ms": int(eou_ms),
+                    "llm_ttft_ms": int(llm_ms),
+                    "tts_ttfb_ms": int(tts_ms),
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
@@ -277,8 +289,8 @@ async def entrypoint(ctx: JobContext):
     )
     
     usage_collector = metrics.UsageCollector()
-    ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse').inc()
-    atexit.register(lambda: ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse').dec())
+    ACTIVE_CONVERSATIONS.labels(agent_type=AGENT_TYPE).inc()
+    atexit.register(lambda: ACTIVE_CONVERSATIONS.labels(agent_type=AGENT_TYPE).dec())
     logger.info("Session initialized with metrics collector")
 
     @session.on("metrics_collected")
@@ -296,52 +308,81 @@ async def entrypoint(ctx: JobContext):
                 current_summary = usage_collector.get_summary()
                 logger.debug(f"Current usage summary: {current_summary}")
                 
+                # Get current values from metrics
+                current_prompt_tokens = LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b')._value.get() or 0
+                current_completion_tokens = LLM_TOKENS.labels(type='completion', model='llama-3.3-70b')._value.get() or 0
+                current_stt_duration = STT_DURATION.labels(provider='deepgram')._value.get() or 0
+                current_tts_chars = TTS_CHARS.labels(provider='openai')._value.get() or 0
+                
                 # Update Prometheus metrics with logging
                 if hasattr(current_summary, 'llm_prompt_tokens'):
-                    prev_value = LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b')._value.get()
-                    LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b').inc(current_summary.llm_prompt_tokens)
-                    logger.info(f"Updated LLM prompt tokens: {prev_value} -> {prev_value + current_summary.llm_prompt_tokens}")
+                    new_prompt_tokens = current_summary.llm_prompt_tokens
+                    if new_prompt_tokens > current_prompt_tokens:
+                        LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b').inc(new_prompt_tokens - current_prompt_tokens)
+                        logger.info(f"Updated LLM prompt tokens: {current_prompt_tokens} -> {new_prompt_tokens}")
                 
                 if hasattr(current_summary, 'llm_completion_tokens'):
-                    prev_value = LLM_TOKENS.labels(type='completion', model='llama-3.3-70b')._value.get()
-                    LLM_TOKENS.labels(type='completion', model='llama-3.3-70b').inc(current_summary.llm_completion_tokens)
-                    logger.info(f"Updated LLM completion tokens: {prev_value} -> {prev_value + current_summary.llm_completion_tokens}")
+                    new_completion_tokens = current_summary.llm_completion_tokens
+                    if new_completion_tokens > current_completion_tokens:
+                        LLM_TOKENS.labels(type='completion', model='llama-3.3-70b').inc(new_completion_tokens - current_completion_tokens)
+                        logger.info(f"Updated LLM completion tokens: {current_completion_tokens} -> {new_completion_tokens}")
                 
                 if hasattr(current_summary, 'stt_audio_duration'):
-                    prev_value = STT_DURATION.labels(provider='deepgram')._value.get()
-                    STT_DURATION.labels(provider='deepgram').inc(current_summary.stt_audio_duration)
-                    logger.info(f"Updated STT duration: {prev_value} -> {prev_value + current_summary.stt_audio_duration}")
+                    new_stt_duration = current_summary.stt_audio_duration
+                    if new_stt_duration > current_stt_duration:
+                        STT_DURATION.labels(provider='deepgram').inc(new_stt_duration - current_stt_duration)
+                        logger.info(f"Updated STT duration: {current_stt_duration} -> {new_stt_duration}")
                 
                 if hasattr(current_summary, 'tts_characters_count'):
-                    prev_value = TTS_CHARS.labels(provider='openai')._value.get()
-                    TTS_CHARS.labels(provider='openai').inc(current_summary.tts_characters_count)
-                    logger.info(f"Updated TTS characters: {prev_value} -> {prev_value + current_summary.tts_characters_count}")
+                    new_tts_chars = current_summary.tts_characters_count
+                    if new_tts_chars > current_tts_chars:
+                        TTS_CHARS.labels(provider='openai').inc(new_tts_chars - current_tts_chars)
+                        logger.info(f"Updated TTS characters: {current_tts_chars} -> {new_tts_chars}")
                 
-                # Calculate and update costs with logging
-                llm_cost = (getattr(current_summary, 'llm_prompt_tokens', 0) * 0.00001 + 
-                           getattr(current_summary, 'llm_completion_tokens', 0) * 0.00003)
-                stt_cost = getattr(current_summary, 'stt_audio_duration', 0) * 0.0001
-                tts_cost = getattr(current_summary, 'tts_characters_count', 0) * 0.000015
+                # Calculate costs from current summary values
+                llm_cost = (getattr(current_summary, 'llm_prompt_tokens', 0) * 0.00001 +  # $0.01 per 1K input tokens
+                           getattr(current_summary, 'llm_completion_tokens', 0) * 0.00003)  # $0.03 per 1K output tokens
+                stt_cost = getattr(current_summary, 'stt_audio_duration', 0) * 0.0001  # $0.0001 per second
+                tts_cost = getattr(current_summary, 'tts_characters_count', 0) * 0.000015  # $0.000015 per character
                 
-                prev_llm_cost = LLM_COST.labels(model='llama-3.3-70b')._value.get()
-                prev_stt_cost = STT_COST.labels(provider='deepgram')._value.get()
-                prev_tts_cost = TTS_COST.labels(provider='openai')._value.get()
+                # Log the cost calculation details
+                logger.info(
+                    "Cost calculation details",
+                    extra={
+                        "llm_tokens": {
+                            "prompt_tokens": getattr(current_summary, 'llm_prompt_tokens', 0),
+                            "completion_tokens": getattr(current_summary, 'llm_completion_tokens', 0),
+                            "prompt_cost": getattr(current_summary, 'llm_prompt_tokens', 0) * 0.00001,
+                            "completion_cost": getattr(current_summary, 'llm_completion_tokens', 0) * 0.00003,
+                            "total_llm_cost": llm_cost
+                        },
+                        "stt_duration": {
+                            "seconds": getattr(current_summary, 'stt_audio_duration', 0),
+                            "cost": stt_cost
+                        },
+                        "tts_chars": {
+                            "count": getattr(current_summary, 'tts_characters_count', 0),
+                            "cost": tts_cost
+                        },
+                        "total_cost": llm_cost + stt_cost + tts_cost
+                    }
+                )
                 
-                LLM_COST.labels(model='llama-3.3-70b').inc(llm_cost)
-                STT_COST.labels(provider='deepgram').inc(stt_cost)
-                TTS_COST.labels(provider='openai').inc(tts_cost)
-                TOTAL_COST.inc(llm_cost + stt_cost + tts_cost)
+                # Update cost metrics (these are Gauges, so set() is fine)
+                LLM_COST.labels(model='llama-3.3-70b').set(llm_cost)
+                STT_COST.labels(provider='deepgram').set(stt_cost)
+                TTS_COST.labels(provider='openai').set(tts_cost)
                 
                 logger.info(
                     "Updated cost metrics",
                     extra={
-                        "llm_cost": f"{prev_llm_cost} -> {prev_llm_cost + llm_cost}",
-                        "stt_cost": f"{prev_stt_cost} -> {prev_stt_cost + stt_cost}",
-                        "tts_cost": f"{prev_tts_cost} -> {prev_tts_cost + tts_cost}",
+                        "llm_cost": llm_cost,
+                        "stt_cost": stt_cost,
+                        "tts_cost": tts_cost,
+                        "total_cost": llm_cost + stt_cost + tts_cost,
                         "timestamp": datetime.utcnow().isoformat()
                     }
                 )
-                
             except Exception as e:
                 logger.error(f"Error updating Prometheus metrics: {e}")
         except Exception as e:
@@ -352,7 +393,7 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing LLM metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                LLM_LATENCY.labels(model='llama-3.3-70b').set(duration_ms)
+                LLM_LATENCY.labels(model='llama-3.3-70b', agent_type=AGENT_TYPE).set(duration_ms)
                 logger.debug(f"Observed LLM latency: {duration_ms}ms")
             if hasattr(ev.metrics, 'ttft'):
                 current_turn_metrics['llm_ttft'] = ev.metrics.ttft
@@ -372,7 +413,7 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing STT metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                STT_LATENCY.labels(provider='deepgram').set(duration_ms)
+                STT_LATENCY.labels(provider='deepgram', agent_type=AGENT_TYPE).set(duration_ms)
                 logger.debug(f"Observed STT latency: {duration_ms}ms")
                 logger.info(
                     "STT Metrics",
@@ -386,7 +427,7 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing TTS metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                TTS_LATENCY.labels(provider='openai').set(duration_ms)
+                TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(duration_ms)
                 logger.debug(f"Observed TTS latency: {duration_ms}ms")
             if hasattr(ev.metrics, 'ttfb'):
                 current_turn_metrics['tts_ttfb'] = ev.metrics.ttfb
@@ -415,7 +456,7 @@ async def entrypoint(ctx: JobContext):
             # Convert seconds to milliseconds for consistency with other metrics
             if hasattr(ev.metrics, 'end_of_utterance_delay'):
                 delay_ms = ev.metrics.end_of_utterance_delay * 1000
-                EOU_LATENCY.set(delay_ms)
+                EOU_LATENCY.labels(agent_type=AGENT_TYPE).set(delay_ms)
                 logger.debug(f"Observed EOU delay: {delay_ms}ms")
                 current_turn_metrics['eou_delay'] = ev.metrics.end_of_utterance_delay
                 calculate_total_latency()
@@ -446,10 +487,6 @@ async def entrypoint(ctx: JobContext):
             
             # Calculate totals and costs
             total_tokens = llm_prompt_tokens + llm_completion_tokens
-            # Rough cost estimates (adjust these based on your actual pricing)
-            llm_cost = (llm_prompt_tokens * 0.00001 + llm_completion_tokens * 0.00003)  # $0.01/1K tokens for input, $0.03/1K for output
-            stt_cost = stt_duration * 0.0001  # $0.0001 per second
-            tts_cost = tts_chars * 0.000015  # $0.000015 per character
             
             # Convert UsageSummary to a dictionary of its attributes
             summary_dict = {
@@ -457,20 +494,16 @@ async def entrypoint(ctx: JobContext):
                     "prompt_tokens": llm_prompt_tokens,
                     "prompt_cached_tokens": getattr(summary, 'llm_prompt_cached_tokens', 0),
                     "completion_tokens": llm_completion_tokens,
-                    "total_tokens": total_tokens,
-                    "estimated_cost": round(llm_cost, 6)
+                    "total_tokens": total_tokens
                 } if any(hasattr(summary, attr) for attr in ['llm_prompt_tokens', 'llm_completion_tokens']) else None,
                 "stt": {
-                    "audio_duration": stt_duration,
-                    "estimated_cost": round(stt_cost, 6)
+                    "audio_duration": stt_duration
                 } if hasattr(summary, 'stt_audio_duration') else None,
                 "tts": {
-                    "characters_count": tts_chars,
-                    "estimated_cost": round(tts_cost, 6)
+                    "characters_count": tts_chars
                 } if hasattr(summary, 'tts_characters_count') else None,
                 "totals": {
-                    "total_tokens": total_tokens,
-                    "total_cost": round(llm_cost + stt_cost + tts_cost, 6)
+                    "total_tokens": total_tokens
                 }
             }
             
@@ -478,14 +511,14 @@ async def entrypoint(ctx: JobContext):
                 "Session Summary",
                 extra={
                     "usage_summary": json.dumps(summary_dict),
-                    "active_conversations": ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse')._value.get(),
+                    "active_conversations": ACTIVE_CONVERSATIONS.labels(agent_type=AGENT_TYPE)._value.get(),
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
         except Exception as e:
             logger.error(f"Error getting usage summary: {e}")
         finally:
-            ACTIVE_CONVERSATIONS.labels(agent_type='fast-preresponse').dec()
+            ACTIVE_CONVERSATIONS.labels(agent_type=AGENT_TYPE).dec()
 
     # Register metrics handler before starting the session
     logger.info("Registering metrics handler")
