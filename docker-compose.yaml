@@ -2,159 +2,260 @@ networks:
   lknetwork:
   
 services:
-  livekit:
-    image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml
-    restart: unless-stopped
-    # network_mode: "host"
-    ports:
-    - "7880:7880"
-    - "7881:7881"
-    - "7882:7882"
-    - "50100-50200:50100-50200"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
-      - ./certs:/etc/certs
-    depends_on:
-      - redis
-    networks:
-      - lknetwork
+  # livekit:
+  #   image: livekit/livekit-server:latest
+  #   command: --config /etc/livekit.yaml
+  #   restart: unless-stopped
+  #   # network_mode: "host"
+  #   ports:
+  #   - "7880:7880"
+  #   - "7881:7881"
+  #   - "7882:7882"
+  #   - "50100-50200:50100-50200"
+  #   volumes:
+  #     - ./livekit.yaml:/etc/livekit.yaml
+  #     - ./certs:/etc/certs
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - lknetwork
   redis:
     image: redis:7-alpine
-    command: redis-server /etc/redis.conf
+    container_name: redis
     restart: unless-stopped
-    # network_mode: "host"
-    # ports:
-    #   - 6379:6379
-    volumes:
-      - ./redis.conf:/etc/redis.conf
-    networks:
-      - lknetwork
-  agents-playground:
-    build:
-      context: ./agents-playground
-    volumes:
-      - ./agents-playground:/usr/src/app
-      - /usr/src/app/node_modules   # Avoid overwriting node_modules
-    env_file:
-      - ./agents-playground.yaml  # Load the environment variables from the YAML file
     ports:
-      - "3000:3000"
-    depends_on:
-      - livekit
-    networks:
-      - lknetwork
-  agent-worker:
-      build:
-        context: ./agent-worker
-        dockerfile: Dockerfile
-      volumes:
-        - ./agent-worker:/app
-        - prom_data:/tmp/prometheus_multiproc
-      env_file:
-        - ./agent-worker/.env
-      depends_on:
-        - livekit
-      networks:
-        - lknetwork
-  kokoro:
-    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
-    ports:
-      - "8880:8880"
-    networks:
-      - lknetwork
-  speaches:
-    image: ghcr.io/speaches-ai/speaches:latest-cpu
-    ports:
-      - "8000:8000"
-    volumes:
-    - ./model_aliases.json:/home/ubuntu/speaches/model_aliases.json
-    entrypoint: ["/bin/sh", "-c", "uvicorn --factory speaches.main:create_app & until curl -s http://localhost:8000/v1/models/whisper-1 > /dev/null; do echo 'Waiting for server...'; sleep 2; done; curl -X POST http://localhost:8000/v1/models/whisper-1; wait"]
-    networks:
-      - lknetwork
-  agent-metrics:
-    build: ./agent-metrics
-    ports:
-      - "9100:9100"
-    volumes:
-      - prom_data:/tmp/prometheus_multiproc
-    networks:
-      - lknetwork
-  prometheus:
-    image: prom/prometheus
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
-      - prom_data:/tmp/prometheus_multiproc
-    networks:
-      - lknetwork
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yaml'
-      - '--log.level=debug'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
-  grafana:
-    image: grafana/grafana
-    container_name: grafana
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_AUTH_DISABLE_LOGIN_FORM=false
-      - GF_AUTH_DISABLE_SIGNOUT_MENU=false
-      - GF_AUTH_DISABLE_REMEMBER_ME=false
-      - GF_AUTH_DISABLE_LOGIN=false
-      - GF_AUTH_DISABLE_GRAVATAR=true
-      - GF_AUTH_DISABLE_BASIC_AUTH=false
-      - GF_AUTH_DISABLE_BRUTE_FORCE_LOGIN_PROTECTION=true
-      - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=false
-      - GF_SECURITY_SECRET_KEY=your-secret-key
-      - GF_SECURITY_DISABLE_GRAVATAR=true
-      - GF_SECURITY_COOKIE_SECURE=false
-      - GF_SECURITY_ALLOW_EMBEDDING=true
-      - GF_SECURITY_STRICT_TRANSPORT_SECURITY=false
-      - GF_SECURITY_STRICT_TRANSPORT_SECURITY_MAX_AGE_SECONDS=0
-      - GF_LIVE_ENABLED=true
-      - GF_LIVE_MAX_CONNECTION_LIFETIME=1h
-      - GF_LIVE_HA_MODE=false
-      - GF_LIVE_PUSHER_ENABLED=true
-      - GF_LIVE_PUSHER_BACKEND=memory
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+      - "6379:6379"
     networks:
       - lknetwork
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  # agents-playground:
+  #   build:
+  #     context: ./agents-playground
+  #   volumes:
+  #     - ./agents-playground:/usr/src/app
+  #     - /usr/src/app/node_modules   # Avoid overwriting node_modules
+  #   env_file:
+  #     - ./agents-playground.yaml  # Load the environment variables from the YAML file
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - livekit
+  #   networks:
+  #     - lknetwork
+  # agent-worker:
+  #     build:
+  #       context: ./agent-worker
+  #       dockerfile: Dockerfile
+  #     volumes:
+  #       - ./agent-worker:/app
+  #       - prom_data:/tmp/prometheus_multiproc
+  #     env_file:
+  #       - ./agent-worker/.env
+  #     depends_on:
+  #       - livekit
+  #     networks:
+  #       - lknetwork
+  # kokoro:
+  #   image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+  #   ports:
+  #     - "8880:8880"
+  #   networks:
+  #     - lknetwork
+  # speaches:
+  #   image: ghcr.io/speaches-ai/speaches:latest-cpu
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #   - ./model_aliases.json:/home/ubuntu/speaches/model_aliases.json
+  #   entrypoint: ["/bin/sh", "-c", "uvicorn --factory speaches.main:create_app & until curl -s http://localhost:8000/v1/models/whisper-1 > /dev/null; do echo 'Waiting for server...'; sleep 2; done; curl -X POST http://localhost:8000/v1/models/whisper-1; wait"]
+  #   networks:
+  #     - lknetwork
+  # agent-metrics:
+  #   build: ./agent-metrics
+  #   ports:
+  #     - "9100:9100"
+  #   volumes:
+  #     - prom_data:/tmp/prometheus_multiproc
+  #   networks:
+  #     - lknetwork
+  # prometheus:
+  #   image: prom/prometheus
+  #   container_name: prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+  #     - prom_data:/tmp/prometheus_multiproc
+  #   networks:
+  #     - lknetwork
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yaml'
+  #     - '--log.level=debug'
+  #     - '--storage.tsdb.path=/prometheus'
+  #     - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+  #     - '--web.console.templates=/usr/share/prometheus/consoles'
+  #     - '--web.enable-lifecycle'
+  # grafana:
+  #   image: grafana/grafana
+  #   container_name: grafana
+  #   ports:
+  #     - "3001:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_USERS_ALLOW_SIGN_UP=false
+  #     - GF_AUTH_ANONYMOUS_ENABLED=true
+  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+  #     - GF_AUTH_DISABLE_LOGIN_FORM=false
+  #     - GF_AUTH_DISABLE_SIGNOUT_MENU=false
+  #     - GF_AUTH_DISABLE_REMEMBER_ME=false
+  #     - GF_AUTH_DISABLE_LOGIN=false
+  #     - GF_AUTH_DISABLE_GRAVATAR=true
+  #     - GF_AUTH_DISABLE_BASIC_AUTH=false
+  #     - GF_AUTH_DISABLE_BRUTE_FORCE_LOGIN_PROTECTION=true
+  #     - GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=false
+  #     - GF_SECURITY_SECRET_KEY=your-secret-key
+  #     - GF_SECURITY_DISABLE_GRAVATAR=true
+  #     - GF_SECURITY_COOKIE_SECURE=false
+  #     - GF_SECURITY_ALLOW_EMBEDDING=true
+  #     - GF_SECURITY_STRICT_TRANSPORT_SECURITY=false
+  #     - GF_SECURITY_STRICT_TRANSPORT_SECURITY_MAX_AGE_SECONDS=0
+  #     - GF_LIVE_ENABLED=true
+  #     - GF_LIVE_MAX_CONNECTION_LIFETIME=1h
+  #     - GF_LIVE_HA_MODE=false
+  #     - GF_LIVE_PUSHER_ENABLED=true
+  #     - GF_LIVE_PUSHER_BACKEND=memory
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning
+  #     - ./grafana/dashboards:/var/lib/grafana/dashboards
+  #     - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+  #   networks:
+  #     - lknetwork
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 30s
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11435:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - lknetwork
+  #   depends_on:
+  #     - livekit
+  #   entrypoint: /bin/bash -c "ollama serve & sleep 5 && ollama pull llama3.2:1b && wait"
+  nginx:
+    image: nginx:alpine
+    container_name: peermetrics-nginx
+    ports:
+      - "8080:8080"   # public web port
+      - "8081:8081"   # (optional) if you want to expose the API separately
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - web_static:/app/web
+      - api_static:/app/api
+    depends_on:
+      - peermetrics-web
+      - peermetrics-api
+    networks:
+      - lknetwork
+    restart: unless-stopped
+  peermetrics-api:
+    image: peermetrics/api:latest
+    container_name: peermetrics-api
+    command: "gunicorn api.wsgi:application --bind 0.0.0.0:8081 --log-level debug --reload"
+    environment:
+      # Django/Python API Configuration
+      - DEBUG=False
+      - DJANGO_SETTINGS_MODULE=api.settings
+      - SECRET_KEY=secret
+      - INIT_TOKEN_SECRET=supersecret
+      - SESSION_TOKEN_SECRET=secret
+      - WEB_DOMAIN=localhost:8082
+      # Redis Configuration
+      - REDIS_HOST=redis://redis:6379
+      # Database Configuration
+      - DATABASE_HOST=peermetrics-db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=peermetrics
+      - DATABASE_PASSWORD=peermetrics
+      - DATABASE_NAME=peermetrics
+      - CONN_MAX_AGE=14400
+      # Application Configuration
+      - POST_CONFERENCE_CLEANUP=True
+    volumes:
+      - api_static:/app/data
+    depends_on:
+      - peermetrics-db
+      - redis
+    networks:
+      - lknetwork
+    restart: "on-failure"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11435:11434"
+  peermetrics-db:
+    image: postgres:15-alpine
+    container_name: peermetrics-db
+    environment:
+      - POSTGRES_DB=peermetrics
+      - POSTGRES_USER=peermetrics
+      - POSTGRES_PASSWORD=peermetrics
     volumes:
-      - ollama-data:/root/.ollama
+      - peermetrics-db-data:/var/lib/postgresql/data
     networks:
       - lknetwork
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U peermetrics -d peermetrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  peermetrics-web:
+    image: peermetrics/web:latest
+    container_name: peermetrics-web
+    command: "gunicorn web.wsgi:application --bind 0.0.0.0:8080 --log-level info"
+    volumes:
+      - web_static:/app/static
+    environment:
+      # Django/Python Web Configuration
+      - DEBUG=True
+      - DJANGO_SETTINGS_MODULE=web.settings
+      - SECRET_KEY=secret
+      # API Configuration
+      - API_ROOT=http://localhost:8081/v1
+      # Database Configuration
+      - DATABASE_HOST=peermetrics-db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=peermetrics
+      - DATABASE_PASSWORD=peermetrics
+      - DATABASE_NAME=peermetrics
+      - CONN_MAX_AGE=14400
     depends_on:
-      - livekit
-    entrypoint: /bin/bash -c "ollama serve & sleep 5 && ollama pull llama3.2:1b && wait"
+      - peermetrics-api
+    networks:
+      - lknetwork
+    restart: "on-failure"
 
 volumes:
   grafana-data:
   prom_data:
   ollama-data:
+  peermetrics-db-data:
+  web_static:
+  api_static:

@@ -52,7 +52,10 @@ Make sure that at least the services "agent-playground", "agent-worker", "liveki
 
 ## Monitoring
 
-The solution is build using Prometheus and grafana. The end to end flow is:
+The solution uses both **Prometheus/Grafana** and **PeerMetrics** for comprehensive WebRTC monitoring.
+
+### Prometheus & Grafana
+The traditional monitoring stack with end-to-end flow:
 Agent worker → writes metrics to shared temp folder → agent_metrics exposes them → Prometheus scrapes them → Grafana displays them.
 
 [Agent Worker](./agent-worker/) live metrics are exposed on port 9100 and can be accessed at:
@@ -63,6 +66,40 @@ http://localhost:9100/metrics
 Grafana is available in [http://localhost:3001](http://localhost:3001) with default user/password: admin/admin
 A default dashboard is setup to visualize basic real time voice agents information.
 
+### PeerMetrics WebRTC Analytics
+**PeerMetrics** provides specialized WebRTC monitoring and analytics, tracking connection quality, media performance, and network statistics.
+
+**Setup Requirements:**
+Before using PeerMetrics, you need to run database migrations for both services. The migrations must be run in the correct order:
+
+**API Migrations (first time only)**
+```bash
+# Start a shell in the API container
+docker compose run peermetrics-api sh
+
+# Inside the container, create models
+python manage.py makemigrations app
+
+# Run PeerMetrics app migrations
+python manage.py migrate app
+
+# Exit the container
+exit
+```
+
+**Access Points:**
+- **PeerMetrics API**: [http://localhost:3002](http://localhost:3002) - API endpoint for metrics collection
+- **PeerMetrics Dashboard**: [http://localhost:3003](http://localhost:3003) - Web interface for analytics
+
+**Configuration:**
+PeerMetrics integration is configured in [src/config/peerMetrics.ts](./agents-playground/src/config/peerMetrics.ts) and automatically tracks:
+- Connection quality metrics (RTT, packet loss, jitter)
+- Media performance (audio/video bitrates, resolution, frame rates)
+- Network statistics (ICE connection state, candidate pairs)
+- User events (mute/unmute, page visibility changes)
+
+For detailed setup instructions, see [PEERMETRICS_SETUP.md](./agents-playground/PEERMETRICS_SETUP.md).
+
 ## 🙏 Credits
 
 This project is built on top of amazing open-source tools and services:
@@ -71,4 +108,5 @@ This project is built on top of amazing open-source tools and services:
 - **[Ollama](https://ollama.ai)** - Local LLM inference engine
 - **[Llama](https://llama.meta.com/)** - Open-source large language models by Meta
 - **[Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M)** - Open-source text-to-speech model
+- **[PeerMetrics](https://github.com/peermetrics)** - WebRTC monitoring and analytics platform
 - **[Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/)** - Metrics collection, monitoring and visualization
