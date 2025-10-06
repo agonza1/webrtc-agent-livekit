@@ -13,6 +13,9 @@ import {
   PlaygroundTile,
 } from "@/components/playground/PlaygroundTile";
 import { useConfig } from "@/hooks/useConfig";
+import { usePeerMetrics } from "@/hooks/usePeerMetrics";
+import { peerMetricsConfig } from "@/config/peerMetrics";
+import { PeerMetricsDebug } from "@/components/PeerMetricsDebug";
 import { TranscriptionTile } from "@/transcriptions/TranscriptionTile";
 import {
   BarVisualizer,
@@ -62,6 +65,19 @@ export default function Playground({
 
   const [rpcMethod, setRpcMethod] = useState("");
   const [rpcPayload, setRpcPayload] = useState("");
+
+  // Initialize PeerMetrics when room is connected
+  const peerMetrics = usePeerMetrics(room, {
+    apiKey: peerMetricsConfig.apiKey,
+    apiRoot: peerMetricsConfig.apiRoot,
+    userId: localParticipant.identity || 'unknown-user',
+    userName: localParticipant.name || 'Unknown User',
+    conferenceId: name || 'default-conference',
+    conferenceName: name || 'Default Conference',
+    serverId: peerMetricsConfig.defaultServer.serverId,
+    serverName: peerMetricsConfig.defaultServer.serverName,
+    enabled: roomState === ConnectionState.Connected
+  });
 
   useEffect(() => {
     if (roomState === ConnectionState.Connected) {
@@ -462,6 +478,7 @@ export default function Playground({
           onConnect(roomState === ConnectionState.Disconnected)
         }
       />
+      <PeerMetricsDebug peerMetrics={peerMetrics} />
       <div
         className={`flex gap-4 py-4 grow w-full selection:bg-${config.settings.theme_color}-900`}
         style={{ height: `calc(100% - ${headerHeight}px)` }}

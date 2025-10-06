@@ -87,9 +87,12 @@ python manage.py migrate app
 exit
 ```
 
+**Peermetrics Web MigrationS (first time only)**
+TBC
+
 **Access Points:**
-- **PeerMetrics API**: [http://localhost:3002](http://localhost:3002) - API endpoint for metrics collection
-- **PeerMetrics Dashboard**: [http://localhost:3003](http://localhost:3003) - Web interface for analytics
+- **PeerMetrics API**: [http://localhost:8081](http://localhost:8081) - API endpoint for metrics collection. You can try [http://localhost:8081/v1/apps](http://localhost:8081/v1/apps) to list your created peermetrics apps
+- **PeerMetrics Dashboard**: [http://localhost:8080](http://localhost:8080) - Web interface for analytics
 
 **Configuration:**
 PeerMetrics integration is configured in [src/config/peerMetrics.ts](./agents-playground/src/config/peerMetrics.ts) and automatically tracks:

@@ -2,23 +2,23 @@ networks:
   lknetwork:
   
 services:
-  # livekit:
-  #   image: livekit/livekit-server:latest
-  #   command: --config /etc/livekit.yaml
-  #   restart: unless-stopped
-  #   # network_mode: "host"
-  #   ports:
-  #   - "7880:7880"
-  #   - "7881:7881"
-  #   - "7882:7882"
-  #   - "50100-50200:50100-50200"
-  #   volumes:
-  #     - ./livekit.yaml:/etc/livekit.yaml
-  #     - ./certs:/etc/certs
-  #   depends_on:
-  #     - redis
-  #   networks:
-  #     - lknetwork
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    # network_mode: "host"
+    ports:
+    - "7880:7880"
+    - "7881:7881"
+    - "7882:7882"
+    - "50100-50200:50100-50200"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+      - ./certs:/etc/certs
+    depends_on:
+      - redis
+    networks:
+      - lknetwork
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -32,20 +32,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-  # agents-playground:
-  #   build:
-  #     context: ./agents-playground
-  #   volumes:
-  #     - ./agents-playground:/usr/src/app
-  #     - /usr/src/app/node_modules   # Avoid overwriting node_modules
-  #   env_file:
-  #     - ./agents-playground.yaml  # Load the environment variables from the YAML file
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - livekit
-  #   networks:
-  #     - lknetwork
+  agents-playground:
+    build:
+      context: ./agents-playground
+    volumes:
+      - ./agents-playground:/usr/src/app
+      - /usr/src/app/node_modules   # Avoid overwriting node_modules
+    env_file:
+      - ./agents-playground.yaml  # Load the environment variables from the YAML file
+    ports:
+      - "3000:3000"
+    depends_on:
+      - livekit
+    networks:
+      - lknetwork
   # agent-worker:
   #     build:
   #       context: ./agent-worker
@@ -163,7 +163,6 @@ services:
       - "8081:8081"   # (optional) if you want to expose the API separately
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - web_static:/app/web
       - api_static:/app/api
     depends_on:
@@ -205,7 +204,7 @@ services:
     restart: "on-failure"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1"]
-      interval: 10s
+      interval: 20s
       timeout: 5s
       retries: 3
       start_period: 30s
