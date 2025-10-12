@@ -87,8 +87,13 @@ python manage.py migrate app
 exit
 ```
 
-**Peermetrics Web MigrationS (first time only)**
-TBC
+**Web Setup (first time only)**
+```bash
+# Collect static files and create node_modules symlink
+docker compose run peermetrics-web sh -c "python manage.py collectstatic --noinput && ln -sf /app/node_modules /app/static/node_modules"
+```
+
+Note: These settings persist in the `web_static` volume, so you only need to run this once.
 
 **Access Points:**
 - **PeerMetrics API**: [http://localhost:8081](http://localhost:8081) - API endpoint for metrics collection. You can try [http://localhost:8081/v1/apps](http://localhost:8081/v1/apps) to list your created peermetrics apps
