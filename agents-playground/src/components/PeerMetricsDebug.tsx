@@ -87,7 +87,17 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
             </div>
             
             <div className="text-xs text-gray-600">
-              <p>PeerMetrics is active and monitoring your WebRTC connections.</p>
+              <p>
+                <a 
+                  href="http://localhost:8080/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 underline"
+                >
+                  PeerMetrics
+                </a>
+                {' '}is active and monitoring your WebRTC connections.
+              </p>
               <p>Check the console for detailed logs.</p>
             </div>
           </div>

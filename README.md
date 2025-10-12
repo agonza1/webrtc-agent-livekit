@@ -89,8 +89,8 @@ exit
 
 **Web Setup (first time only)**
 ```bash
-# Collect static files and create node_modules symlink
-docker compose run peermetrics-web sh -c "python manage.py collectstatic --noinput && ln -sf /app/node_modules /app/static/node_modules"
+# Collect static files and create necessary symlinks
+docker compose run peermetrics-web sh -c "python manage.py collectstatic --noinput && ln -sf /app/node_modules /app/static/node_modules && cd /app/static/js/app-dashboard && ln -sf index.min.js index.js && cd /app/static/js/conference && ln -sf index.min.js index.js && cd /app/static/js/participant && ln -sf index.min.js index.js"
 ```
 
 Note: These settings persist in the `web_static` volume, so you only need to run this once.

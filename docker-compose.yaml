@@ -46,19 +46,20 @@ services:
       - livekit
     networks:
       - lknetwork
-  # agent-worker:
-  #     build:
-  #       context: ./agent-worker
-  #       dockerfile: Dockerfile
-  #     volumes:
-  #       - ./agent-worker:/app
-  #       - prom_data:/tmp/prometheus_multiproc
-  #     env_file:
-  #       - ./agent-worker/.env
-  #     depends_on:
-  #       - livekit
-  #     networks:
-  #       - lknetwork
+  agent-worker:
+      build:
+        context: ./agent-worker
+        dockerfile: Dockerfile
+      volumes:
+        - ./agent-worker:/app
+        - prom_data:/tmp/prometheus_multiproc
+        - hf_cache:/root/.cache/huggingface
+      env_file:
+        - ./agent-worker/.env
+      depends_on:
+        - livekit
+      networks:
+        - lknetwork
   # kokoro:
   #   image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
   #   ports:
@@ -254,6 +255,7 @@ services:
 volumes:
   grafana-data:
   prom_data:
+  hf_cache:
   ollama-data:
   peermetrics-db-data:
   web_static:

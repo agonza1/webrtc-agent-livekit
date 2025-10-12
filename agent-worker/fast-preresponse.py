@@ -308,7 +308,7 @@ async def entrypoint(ctx: JobContext):
             start_new_turn()
 
     session = AgentSession(
-        # turn_detection=EnglishModel(),
+        turn_detection=EnglishModel(),
         stt=deepgram.STT(),
         # stt = aws.STT(
         #     session_id=str(uuid.uuid4()),
@@ -592,11 +592,22 @@ async def entrypoint(ctx: JobContext):
     ctx.add_shutdown_callback(log_usage)
 
 
+async def prewarm(proc: JobContext):
+    """Download model files before starting the agent."""
+    logger.info("Prewarming: downloading model files...")
+    # Download turn detector model
+    await EnglishModel.download_files()
+    logger.info("Model files downloaded successfully")
+
+
 if __name__ == "__main__":
     try:
         # Initialize metrics before starting the server
         initialize_metrics()        
         # Initialize the agent
-        cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+        cli.run_app(WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm
+        ))
     except Exception as e:
         logger.error(f"Error starting application: {e}")
