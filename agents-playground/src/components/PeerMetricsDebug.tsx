@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { PeerMetrics } from '@peermetrics/sdk';
+import { PeerMetricsInstance } from '@/hooks/usePeerMetrics';
 
 interface PeerMetricsDebugProps {
-  peerMetrics: PeerMetrics | null;
+  peerMetrics: PeerMetricsInstance | null;
 }
 
 export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
@@ -10,10 +10,10 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
   const [customEventName, setCustomEventName] = useState('');
 
   const addCustomEvent = async () => {
-    if (!peerMetrics || !customEventName.trim()) return;
+    if (!peerMetrics?.isInitialized || !customEventName.trim()) return;
     
     try {
-      await peerMetrics.addEvent({
+      await peerMetrics.instance.addEvent({
         eventName: customEventName
       });
       setCustomEventName('');
@@ -24,12 +24,12 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
   };
 
   const handleMuteToggle = async () => {
-    if (!peerMetrics) return;
+    if (!peerMetrics?.isInitialized) return;
     
     try {
       // This would typically be called when the user actually mutes/unmutes
       // For demo purposes, we'll just add a custom event
-      await peerMetrics.addEvent({
+      await peerMetrics.instance.addEvent({
         eventName: 'demo-mute-toggle'
       });
       console.log('Mute toggle event added');
@@ -87,7 +87,8 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
             </div>
             
             <div className="text-xs text-gray-600">
-              <p>
+              <p className="mb-2">
+                <span className={`inline-block w-2 h-2 rounded-full mr-2 ${peerMetrics?.isInitialized ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
                 <a 
                   href="http://localhost:8080/" 
                   target="_blank" 
@@ -96,7 +97,7 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
                 >
                   PeerMetrics
                 </a>
-                {' '}is active and monitoring your WebRTC connections.
+                {' '}is {peerMetrics?.isInitialized ? 'initialized and monitoring' : 'initializing...'}.
               </p>
               <p>Check the console for detailed logs.</p>
             </div>

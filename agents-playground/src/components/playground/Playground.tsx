@@ -76,7 +76,9 @@ export default function Playground({
     conferenceName: name || 'Default Conference',
     serverId: peerMetricsConfig.defaultServer.serverId,
     serverName: peerMetricsConfig.defaultServer.serverName,
-    enabled: roomState === ConnectionState.Connected
+    enabled: roomState === ConnectionState.Connected,
+    getStatsInterval: peerMetricsConfig.options.getStatsInterval,
+    debug: peerMetricsConfig.options.debug
   });
 
   useEffect(() => {
@@ -85,6 +87,51 @@ export default function Playground({
       localParticipant.setMicrophoneEnabled(config.settings.inputs.mic);
     }
   }, [config, localParticipant, roomState]);
+
+  // Track microphone mute/unmute events
+  useEffect(() => {
+    // Wait for PeerMetrics to be initialized AND have a session
+    // We need a delay to ensure the session token is established
+    if (!peerMetrics?.isInitialized || roomState !== ConnectionState.Connected) {
+      return;
+    }
+
+    // Wait a bit to ensure session is established before sending events
+    const timer = setTimeout(() => {
+      const eventName = config.settings.inputs.mic ? 'microphone-unmuted' : 'microphone-muted';
+      console.log('🎤 Tracking:', eventName);
+      
+      peerMetrics.instance.addEvent({ 
+        eventName 
+      }).catch((err) => {
+        console.error('Failed to track mic event:', err);
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [config.settings.inputs.mic, peerMetrics?.isInitialized, roomState]);
+
+  // Track camera enable/disable events
+  useEffect(() => {
+    // Wait for PeerMetrics to be initialized AND have a session
+    if (!peerMetrics?.isInitialized || roomState !== ConnectionState.Connected) {
+      return;
+    }
+
+    // Wait a bit to ensure session is established before sending events
+    const timer = setTimeout(() => {
+      const eventName = config.settings.inputs.camera ? 'camera-enabled' : 'camera-disabled';
+      console.log('📹 Tracking:', eventName);
+      
+      peerMetrics.instance.addEvent({ 
+        eventName 
+      }).catch((err) => {
+        console.error('Failed to track camera event:', err);
+      });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [config.settings.inputs.camera, peerMetrics?.isInitialized, roomState]);
 
   const agentVideoTrack = tracks.find(
     (trackRef) =>
