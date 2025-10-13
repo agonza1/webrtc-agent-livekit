@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: PeerMetrics PostgreSQL
+    uid: peermetrics-postgres
+    type: postgres
+    access: proxy
+    url: peermetrics-db:5432
+    database: peermetrics
+    user: peermetrics
+    jsonData:
+      sslmode: disable
+    secureJsonData:
+      password: peermetrics
+    editable: false
+

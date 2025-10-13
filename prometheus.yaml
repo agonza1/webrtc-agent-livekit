@@ -3,6 +3,7 @@ global:
   evaluation_interval: 5s
 
 scrape_configs:
+  # LiveKit Agent Metrics (LLM, STT, TTS, costs, latencies)
   - job_name: 'livekit-agent'
     static_configs:
       - targets: ['agent-metrics:9100']

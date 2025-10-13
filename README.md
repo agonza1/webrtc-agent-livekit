@@ -52,22 +52,57 @@ Make sure that at least the services "agent-playground", "agent-worker", "liveki
 
 ## Monitoring
 
-The solution uses both **Prometheus/Grafana** and **PeerMetrics** for comprehensive WebRTC monitoring.
+The solution provides **unified monitoring** using **Grafana** with two data sources: **Prometheus** for AI agent metrics and **PostgreSQL** for WebRTC quality metrics from PeerMetrics.
 
-### Prometheus & Grafana
-The traditional monitoring stack with end-to-end flow:
-Agent worker → writes metrics to shared temp folder → agent_metrics exposes them → Prometheus scrapes them → Grafana displays them.
+### Simple Architecture
 
-[Agent Worker](./agent-worker/) live metrics are exposed on port 9100 and can be accessed at:
 ```
-http://localhost:9100/metrics
+Agent Worker ──▶ Agent Metrics ──▶ Prometheus ──┐
+                                                 │
+PeerMetrics API ──▶ PostgreSQL DB ──────────────┼──▶ Grafana (3001)
+                                                 
 ```
 
-Grafana is available in [http://localhost:3001](http://localhost:3001) with default user/password: admin/admin
-A default dashboard is setup to visualize basic real time voice agents information.
+**Why this approach?**
+- ✅ Zero intermediary services (no custom exporters)
+- ✅ Real-time data from PostgreSQL (no polling delays)  
+- ✅ More stable (fewer moving parts)
+- ✅ Less resource usage
+- ✅ Native Grafana datasources
+
+### Quick Access
+
+- **Grafana**: [http://localhost:3001](http://localhost:3001) (admin/admin)
+- **Prometheus**: [http://localhost:9090](http://localhost:9090)
+- **PeerMetrics Dashboard**: [http://localhost:8080](http://localhost:8080)
+- **Agent Metrics**: [http://localhost:9100/metrics](http://localhost:9100/metrics)
+
+### Enhanced Dashboard
+
+The **"LiveKit Agent Dashboard"** now includes both AI agent metrics and WebRTC quality metrics:
+
+**AI Agent Metrics** (Prometheus):
+- End of Utterance Delay
+- Fast LLM & Full LLM Latency  
+- TTS Latency
+- Total Conversation Latency
+- Active Conversations
+- Total Cost
+- Conversation Turns
+
+**WebRTC Quality Metrics** (PostgreSQL):
+- Round-Trip Time (RTT)
+- Packet Loss (audio/video)
+- Jitter
+- Media Bitrates
+- Media Throughput
+- Video Frame Rate
+- Connection Events & Errors
+
+Access at: **Dashboards → "LiveKit Agent Dashboard"**
 
 ### PeerMetrics WebRTC Analytics
-**PeerMetrics** provides specialized WebRTC monitoring and analytics, tracking connection quality, media performance, and network statistics.
+**PeerMetrics** provides specialized WebRTC monitoring and analytics, tracking connection quality, media performance, and network statistics
 
 **Setup Requirements:**
 Before using PeerMetrics, you need to run database migrations for both services. The migrations must be run in the correct order:

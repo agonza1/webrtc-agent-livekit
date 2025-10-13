@@ -1,4 +1,33 @@
-google.json
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+
+# Environment
 .env
-certs
-agent-worker.yaml
+.env.local
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+*.pid
+
+# Grafana
+grafana/data/
+
+# Prometheus
+prometheus/data/
