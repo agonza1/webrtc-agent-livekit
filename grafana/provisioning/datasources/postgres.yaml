@@ -9,7 +9,10 @@ datasources:
     database: peermetrics
     user: peermetrics
     jsonData:
+      database: peermetrics
       sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
     secureJsonData:
       password: peermetrics
     editable: false

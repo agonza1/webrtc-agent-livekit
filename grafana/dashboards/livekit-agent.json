@@ -607,7 +607,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "s"
         }
       },
       "gridPos": {
@@ -636,11 +636,11 @@
             "uid": "peermetrics-postgres"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  avg(value::float) as value,\n  conference_id || ' - ' || peer_id as metric\nFROM app_metric\nWHERE\n  name = 'rtt'\n  AND $__timeFilter(created_at)\nGROUP BY time, conference_id, peer_id\nORDER BY time",
+          "rawSql": "SELECT\n  date_trunc('minute', start_time) as time,\n  avg(duration::float) as value,\n  'Average Connection Duration (sec)' as metric\nFROM app_connection\nWHERE\n  duration > 0\nGROUP BY time\nORDER BY time",
           "refId": "A"
         }
       ],
-      "title": "Round-Trip Time (RTT)",
+      "title": "Connection Duration",
       "type": "timeseries"
     },
     {
@@ -701,7 +701,7 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "short"
         }
       },
       "gridPos": {
@@ -730,11 +730,11 @@
             "uid": "peermetrics-postgres"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  avg(CASE WHEN packets_received > 0 THEN (packets_lost::float / packets_received::float * 100) ELSE 0 END) as value,\n  media_type || ' - ' || type as metric\nFROM app_streamstats\nWHERE\n  $__timeFilter(created_at)\n  AND packets_received > 0\nGROUP BY time, media_type, type\nORDER BY time",
+          "rawSql": "SELECT\n  date_trunc('minute', created_at) as time,\n  count(*) as value,\n  'Connection Events' as metric\nFROM app_genericevent\nWHERE\n  type IN ('addConnection', 'endCall')\nGROUP BY time\nORDER BY time",
           "refId": "A"
         }
       ],
-      "title": "Packet Loss",
+      "title": "Connection Activity",
       "type": "timeseries"
     },
     {
@@ -787,7 +787,7 @@
               }
             ]
           },
-          "unit": "ms"
+          "unit": "short"
         }
       },
       "gridPos": {
@@ -816,11 +816,11 @@
             "uid": "peermetrics-postgres"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  avg(jitter::float * 1000) as value,\n  media_type || ' - ' || type as metric\nFROM app_streamstats\nWHERE\n  $__timeFilter(created_at)\n  AND jitter IS NOT NULL\nGROUP BY time, media_type, type\nORDER BY time",
+          "rawSql": "SELECT\n  date_trunc('minute', created_at) as time,\n  count(*) as value,\n  'ICE Candidate Errors' as metric\nFROM app_genericevent\nWHERE\n  type = 'onicecandidateerror'\nGROUP BY time\nORDER BY time",
           "refId": "A"
         }
       ],
-      "title": "Jitter",
+      "title": "Network Errors",
       "type": "timeseries"
     },
     {
@@ -902,7 +902,7 @@
             "uid": "peermetrics-postgres"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  avg(bitrate::float / 1000) as value,\n  media_type || ' - ' || type as metric\nFROM app_streamstats\nWHERE\n  $__timeFilter(created_at)\n  AND bitrate IS NOT NULL\n  AND bitrate > 0\nGROUP BY time, media_type, type\nORDER BY time",
+          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  0 as value,\n  'No Data Available' as metric\nFROM app_genericevent\nWHERE\n  $__timeFilter(created_at)\nGROUP BY time\nORDER BY time\nLIMIT 1",
           "refId": "A"
         }
       ],
@@ -1001,7 +1001,7 @@
             "uid": "peermetrics-postgres"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  avg((bytes_sent::bigint + bytes_received::bigint) / 1024.0 / 1024.0) as value,\n  'Total Throughput' as metric\nFROM app_connectionstats\nWHERE\n  $__timeFilter(created_at)\nGROUP BY time\nORDER BY time",
+          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  0 as value,\n  'No Data Available' as metric\nFROM app_genericevent\nWHERE\n  $__timeFilter(created_at)\nGROUP BY time\nORDER BY time\nLIMIT 1",
           "refId": "A"
         }
       ],
@@ -1087,7 +1087,7 @@
             "uid": "peermetrics-postgres"
           },
           "format": "time_series",
-          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  avg(frames_per_second::float) as value,\n  media_type || ' - ' || type as metric\nFROM app_streamstats\nWHERE\n  $__timeFilter(created_at)\n  AND media_type = 'video'\n  AND frames_per_second IS NOT NULL\n  AND frames_per_second > 0\nGROUP BY time, media_type, type\nORDER BY time",
+          "rawSql": "SELECT\n  date_trunc('second', created_at) as time,\n  0 as value,\n  'No Data Available' as metric\nFROM app_genericevent\nWHERE\n  $__timeFilter(created_at)\nGROUP BY time\nORDER BY time\nLIMIT 1",
           "refId": "A"
         }
       ],
@@ -1147,7 +1147,7 @@
             "uid": "peermetrics-postgres"
           },
           "format": "table",
-          "rawSql": "SELECT\n  e.event_name as \"Event\",\n  count(*) as \"Count\",\n  max(e.created_at) as \"Last Occurrence\"\nFROM app_event e\nWHERE\n  $__timeFilter(e.created_at)\nGROUP BY e.event_name\nORDER BY count(*) DESC\nLIMIT 20",
+          "rawSql": "SELECT\n  e.type as \"Event\",\n  count(*) as \"Count\",\n  max(e.created_at) as \"Last Occurrence\"\nFROM app_genericevent e\nWHERE\n  $__timeFilter(e.created_at)\nGROUP BY e.type\nORDER BY count(*) DESC\nLIMIT 20",
           "refId": "A"
         }
       ],

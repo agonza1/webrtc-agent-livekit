@@ -1,3 +1,47 @@
+# Shared configurations
+x-api-env: &api-env
+  DEBUG: False
+  DJANGO_SETTINGS_MODULE: api.settings
+  SECRET_KEY: secret
+  INIT_TOKEN_SECRET: supersecret
+  SESSION_TOKEN_SECRET: secret
+  WEB_DOMAIN: localhost:8082
+  REDIS_HOST: redis://redis:6379
+  DATABASE_HOST: peermetrics-db
+  DATABASE_PORT: 5432
+  DATABASE_USER: peermetrics
+  DATABASE_PASSWORD: peermetrics
+  DATABASE_NAME: peermetrics
+  CONN_MAX_AGE: 14400
+  POST_CONFERENCE_CLEANUP: True
+
+x-web-env: &web-env
+  DEBUG: True
+  DJANGO_SETTINGS_MODULE: web.settings
+  SECRET_KEY: secret
+  API_ROOT: http://localhost:8081/v1
+  DATABASE_HOST: peermetrics-db
+  DATABASE_PORT: 5432
+  DATABASE_USER: peermetrics
+  DATABASE_PASSWORD: peermetrics
+  DATABASE_NAME: peermetrics
+  CONN_MAX_AGE: 14400
+
+x-api-volumes: &api-volumes
+  - api_static:/app/data
+
+x-web-volumes: &web-volumes
+  - web_static:/app/static
+
+x-api-depends: &api-depends
+  peermetrics-db:
+    condition: service_healthy
+  redis:
+    condition: service_started
+
+x-web-depends: &web-depends
+  - peermetrics-api
+
 networks:
   lknetwork:
   
@@ -160,36 +204,41 @@ services:
     networks:
       - lknetwork
     restart: unless-stopped
+  peermetrics-api-init:
+    image: peermetrics/api:latest
+    container_name: peermetrics-api-init
+    environment: *api-env
+    volumes: *api-volumes
+    depends_on: *api-depends
+    networks: [lknetwork]
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        until python -c 'import django; django.setup(); from django.db import connection; connection.ensure_connection()' 2>/dev/null; do
+          echo 'Database not ready, waiting...';
+          sleep 2;
+        done &&
+        echo 'Checking if migrations are needed...' &&
+        if [ -f /app/data/.migrations_complete ]; then
+          echo 'Database is already initialized, skipping migrations.';
+        else
+          echo 'Running database migrations...' &&
+          python manage.py makemigrations app &&
+          python manage.py migrate app &&
+          touch /app/data/.migrations_complete &&
+          echo 'Database migrations completed successfully!';
+        fi
+      "
+    restart: "no"
+
   peermetrics-api:
     image: peermetrics/api:latest
     container_name: peermetrics-api
     command: "gunicorn api.wsgi:application --bind 0.0.0.0:8081 --log-level debug --reload"
-    environment:
-      # Django/Python API Configuration
-      - DEBUG=False
-      - DJANGO_SETTINGS_MODULE=api.settings
-      - SECRET_KEY=secret
-      - INIT_TOKEN_SECRET=supersecret
-      - SESSION_TOKEN_SECRET=secret
-      - WEB_DOMAIN=localhost:8082
-      # Redis Configuration
-      - REDIS_HOST=redis://redis:6379
-      # Database Configuration
-      - DATABASE_HOST=peermetrics-db
-      - DATABASE_PORT=5432
-      - DATABASE_USER=peermetrics
-      - DATABASE_PASSWORD=peermetrics
-      - DATABASE_NAME=peermetrics
-      - CONN_MAX_AGE=14400
-      # Application Configuration
-      - POST_CONFERENCE_CLEANUP=True
-    volumes:
-      - api_static:/app/data
-    depends_on:
-      - peermetrics-db
-      - redis
-    networks:
-      - lknetwork
+    environment: *api-env
+    volumes: *api-volumes
+    depends_on: [peermetrics-api-init, peermetrics-db, redis]
+    networks: [lknetwork]
     restart: "on-failure"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1"]
@@ -214,30 +263,39 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+  peermetrics-web-init:
+    image: peermetrics/web:latest
+    container_name: peermetrics-web-init
+    environment: *web-env
+    volumes: *web-volumes
+    depends_on: *web-depends
+    networks: [lknetwork]
+    command: >
+      sh -c "
+        echo 'Checking if static files setup is needed...' &&
+        if [ -f /app/static/.static_files_complete ]; then
+          echo 'Static files already set up, skipping collection.';
+        else
+          echo 'Setting up static files and creating symlinks...' &&
+          python manage.py collectstatic --noinput &&
+          ln -sf /app/node_modules /app/static/node_modules &&
+          cd /app/static/js/app-dashboard && ln -sf index.min.js index.js &&
+          cd /app/static/js/conference && ln -sf index.min.js index.js &&
+          cd /app/static/js/participant && ln -sf index.min.js index.js &&
+          touch /app/static/.static_files_complete &&
+          echo 'Static files setup completed successfully!';
+        fi
+      "
+    restart: "no"
+
   peermetrics-web:
     image: peermetrics/web:latest
     container_name: peermetrics-web
     command: "gunicorn web.wsgi:application --bind 0.0.0.0:8080 --log-level info"
-    volumes:
-      - web_static:/app/static
-    environment:
-      # Django/Python Web Configuration
-      - DEBUG=True
-      - DJANGO_SETTINGS_MODULE=web.settings
-      - SECRET_KEY=secret
-      # API Configuration
-      - API_ROOT=http://localhost:8081/v1
-      # Database Configuration
-      - DATABASE_HOST=peermetrics-db
-      - DATABASE_PORT=5432
-      - DATABASE_USER=peermetrics
-      - DATABASE_PASSWORD=peermetrics
-      - DATABASE_NAME=peermetrics
-      - CONN_MAX_AGE=14400
-    depends_on:
-      - peermetrics-api
-    networks:
-      - lknetwork
+    environment: *web-env
+    volumes: *web-volumes
+    depends_on: [peermetrics-web-init, peermetrics-api]
+    networks: [lknetwork]
     restart: "on-failure"
 
 volumes:

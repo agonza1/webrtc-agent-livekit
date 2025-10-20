@@ -132,7 +132,7 @@ def initialize_metrics():
 class PreResponseAgent(Agent):
     def __init__(self):
         super().__init__(
-            instructions= "You are a helpful assistant. Always respond concisely in less than 4 sentences.",      
+            instructions= "You are a helpful assistant. Always respond concisely in less than 6 sentences.",      
             # llm=openai.realtime.RealtimeModel(
             #     turn_detection=TurnDetection(
             #         type="server_vad",
@@ -160,7 +160,7 @@ class PreResponseAgent(Agent):
         )
         self._fast_llm = groq.LLM(
             model="llama-3.1-8b-instant", 
-            temperature=0.1)
+            temperature=0.2)
         self._fast_llm_prompt = llm.ChatMessage(
             role="system",
             content=[
@@ -325,7 +325,7 @@ async def entrypoint(ctx: JobContext):
         #     language="en-US",
         # ),
         vad=silero.VAD.load(
-            min_silence_duration=0.2,
+            min_silence_duration=0.3,
             activation_threshold=0.3, # more sensitive (detects speech faster)
         )
     )
