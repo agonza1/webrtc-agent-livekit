@@ -54,12 +54,12 @@ Make sure that at least the services "agent-playground", "agent-worker", "liveki
 
 The solution provides **unified monitoring** using **Grafana** with two data sources: **Prometheus** for AI agent metrics and **PostgreSQL** for WebRTC quality metrics from PeerMetrics.
 
-### Simple Architecture
+Simple Architecture
 
 ```
 Agent Worker ──▶ Agent Metrics ──▶ Prometheus ──┐
                                                  │
-PeerMetrics API ──▶ PostgreSQL DB ──────────────┼──▶ Grafana (3001)
+PeerMetrics API ──▶ PostgreSQL DB ──────────────┼──▶ Grafana (:3001)
                                                  
 ```
 
@@ -75,7 +75,6 @@ PeerMetrics API ──▶ PostgreSQL DB ─────────────�
 - **Grafana**: [http://localhost:3001](http://localhost:3001) (admin/admin)
 - **Prometheus**: [http://localhost:9090](http://localhost:9090)
 - **PeerMetrics Dashboard**: [http://localhost:8080](http://localhost:8080)
-- **Agent Metrics**: [http://localhost:9100/metrics](http://localhost:9100/metrics)
 
 ### Enhanced Dashboard
 
