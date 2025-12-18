@@ -26,7 +26,7 @@ ENV PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
 RUN mkdir -p ${PROMETHEUS_MULTIPROC_DIR}
 
 # Download model files
-RUN python fast-preresponse.py download-files || true
+RUN python basic.py download-files || true
 
 # Run the application
-CMD ["python", "fast-preresponse.py", "dev"]
+CMD ["python", "basic.py", "dev"]

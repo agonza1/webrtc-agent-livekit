@@ -88,7 +88,13 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
             
             <div className="text-xs text-gray-600">
               <p className="mb-2">
-                <span className={`inline-block w-2 h-2 rounded-full mr-2 ${peerMetrics?.isInitialized ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                  peerMetrics?.error 
+                    ? 'bg-red-500' 
+                    : peerMetrics?.isInitialized 
+                    ? 'bg-green-500' 
+                    : 'bg-yellow-500'
+                }`}></span>
                 <a 
                   href="http://localhost:8080/" 
                   target="_blank" 
@@ -97,8 +103,19 @@ export function PeerMetricsDebug({ peerMetrics }: PeerMetricsDebugProps) {
                 >
                   PeerMetrics
                 </a>
-                {' '}is {peerMetrics?.isInitialized ? 'initialized and monitoring' : 'initializing...'}.
+                {' '}is {
+                  peerMetrics?.error 
+                    ? 'error (see below)' 
+                    : peerMetrics?.isInitialized 
+                    ? 'initialized and monitoring' 
+                    : 'initializing...'
+                }.
               </p>
+              {peerMetrics?.error && (
+                <p className="text-red-600 font-medium mb-2">
+                  ⚠️ Error: {peerMetrics.error.message}
+                </p>
+              )}
               <p>Check the console for detailed logs.</p>
             </div>
           </div>

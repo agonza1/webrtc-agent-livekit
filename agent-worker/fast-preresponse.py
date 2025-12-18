@@ -326,7 +326,7 @@ async def entrypoint(ctx: JobContext):
         # ),
         vad=silero.VAD.load(
             min_silence_duration=0.3,
-            activation_threshold=0.3, # more sensitive (detects speech faster)
+            activation_threshold=0.4, # more sensitive (detects speech faster)
         )
     )
     

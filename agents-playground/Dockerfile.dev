@@ -1,0 +1,21 @@
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+# Install dependencies (including devDependencies for development)
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Next.js collects completely anonymous telemetry data about general usage.
+ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV development
+
+EXPOSE 3000
+
+# Use hostname 0.0.0.0 to allow external connections
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+# Run development server (HTTP)
+CMD ["npm", "run", "dev"]
+

@@ -19,11 +19,14 @@ interface UsePeerMetricsOptions {
 export interface PeerMetricsInstance {
   instance: PeerMetrics;
   isInitialized: boolean;
+  error: Error | null;
 }
 
 export function usePeerMetrics(room: Room | null, options: UsePeerMetricsOptions): PeerMetricsInstance | null {
   const peerMetricsRef = useRef<PeerMetrics | null>(null);
+  const initializedRef = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   
   const { 
     apiKey, 
@@ -40,8 +43,12 @@ export function usePeerMetrics(room: Room | null, options: UsePeerMetricsOptions
   } = options;
 
   useEffect(() => {
+    // Reset state on mount or when dependencies change
+    setError(null);
+    initializedRef.current = false;
+    setIsInitialized(false);
+    
     if (!room || !enabled) {
-      setIsInitialized(false);
       return;
     }
 
@@ -72,7 +79,9 @@ export function usePeerMetrics(room: Room | null, options: UsePeerMetricsOptions
         });
         
         await peerMetrics.initialize();
+        initializedRef.current = true;
         console.log('✅ PeerMetrics: Initialized successfully');
+        setError(null); // Clear any previous errors
         
         // Note: We're NOT using addSdkIntegration because it doesn't reliably detect
         // LiveKit peer connections. Instead, we'll manually add them below.
@@ -142,7 +151,9 @@ export function usePeerMetrics(room: Room | null, options: UsePeerMetricsOptions
         console.log('🎉 PeerMetrics: Ready to track events');
       } catch (error) {
         console.error('❌ Failed to initialize PeerMetrics:', error);
+        initializedRef.current = false;
         setIsInitialized(false);
+        setError(error instanceof Error ? error : new Error(String(error)));
       }
     };
 
@@ -150,11 +161,18 @@ export function usePeerMetrics(room: Room | null, options: UsePeerMetricsOptions
 
     // Cleanup function
     return () => {
-      if (peerMetricsRef.current) {
-        peerMetricsRef.current.endCall();
-        peerMetricsRef.current = null;
+      if (peerMetricsRef.current && initializedRef.current) {
+        try {
+          peerMetricsRef.current.endCall();
+        } catch (cleanupError) {
+          // Log cleanup errors but don't throw - cleanup should be best-effort
+          console.error('⚠️ Error during PeerMetrics cleanup:', cleanupError);
+        }
       }
+      initializedRef.current = false;
+      peerMetricsRef.current = null;
       setIsInitialized(false);
+      setError(null);
     };
   }, [room, apiKey, userId, userName, conferenceId, conferenceName, apiRoot, serverId, serverName, enabled, getStatsInterval, debug]);
 
@@ -164,6 +182,7 @@ export function usePeerMetrics(room: Room | null, options: UsePeerMetricsOptions
 
   return {
     instance: peerMetricsRef.current,
-    isInitialized
+    isInitialized,
+    error
   };
 } 

@@ -2,8 +2,8 @@ export const peerMetricsConfig = {
   // API key for local development (can be any string for local server)
   apiKey: process.env.NEXT_PUBLIC_PEERMETRICS_API_KEY || 'local-dev-key',
   
-  // API root for local PeerMetrics server
-  apiRoot: process.env.NEXT_PUBLIC_PEERMETRICS_API_ROOT || 'http://localhost:8081',
+  // API root for local PeerMetrics server (must end with /v1)
+  apiRoot: process.env.NEXT_PUBLIC_PEERMETRICS_API_ROOT || 'http://localhost:8081/v1',
   
   // Default server configuration
   defaultServer: {
