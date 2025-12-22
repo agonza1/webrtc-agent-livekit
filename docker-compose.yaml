@@ -295,6 +295,7 @@ volumes:
   prom_data_storage:
   hf_cache:
   ollama-data:
+  speaches-models:
   peermetrics-db-data:
   web_static:
   api_static:
