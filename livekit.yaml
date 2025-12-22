@@ -4,8 +4,8 @@ bind_addresses:
     # - 127.0.0.1
 rtc:
     tcp_port: 7881
-    port_range_start: 50000
-    port_range_end: 50100
+    port_range_start: 51000
+    port_range_end: 51100
     #use_external_ip: true
     use_external_ip: false
     enable_loopback_candidate: true

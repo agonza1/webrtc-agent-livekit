@@ -55,7 +55,7 @@ services:
     - "7880:7880"
     - "7881:7881"
     - "7882:7882"
-    - "50100-50200:50100-50200"
+    - "51000-51100:51000-51100"
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml
       - ./certs:/etc/certs
@@ -209,32 +209,14 @@ services:
     networks:
       - lknetwork
     restart: unless-stopped
-  peermetrics-api-init:
-    image: peermetrics/api:latest
-    container_name: peermetrics-api-init
-    environment: *api-env
-    volumes: *api-volumes
-    depends_on: *api-depends
-    networks: [lknetwork]
-    command: >
-      sh -c "
-        echo 'Waiting for database to be ready...' &&
-        until python -c 'import django; django.setup(); from django.db import connection; connection.ensure_connection()' 2>/dev/null; do
-          echo 'Database not ready, waiting...';
-          sleep 2;
-        done &&
-        echo 'Checking if migrations are needed...' &&
-        if [ -f /app/data/.migrations_complete ]; then
-          echo 'Database is already initialized, skipping migrations.';
-        else
-          echo 'Running database migrations...' &&
-          python manage.py makemigrations app &&
-          python manage.py migrate app &&
-          touch /app/data/.migrations_complete &&
-          echo 'Database migrations completed successfully!';
-        fi
-      "
-    restart: "no"
+  # peermetrics-api-init:
+  #   NOTE: Migrations should be run manually as per README.md:
+  #   docker compose run peermetrics-api sh
+  #   python manage.py makemigrations app
+  #   python manage.py migrate app
+  #   exit
+  #   The automatic init was causing migration order issues where Django core
+  #   migrations (admin, auth) tried to run before app migrations created the users table.
 
   peermetrics-api:
     image: peermetrics/api:latest
@@ -242,7 +224,7 @@ services:
     command: "gunicorn api.wsgi:application --bind 0.0.0.0:8081 --log-level debug --reload"
     environment: *api-env
     volumes: *api-volumes
-    depends_on: [peermetrics-api-init, peermetrics-db, redis]
+    depends_on: [peermetrics-db, redis]
     networks: [lknetwork]
     restart: "on-failure"
     healthcheck:

@@ -15,7 +15,7 @@ from livekit.agents import (
     MetricsCollectedEvent
 )
 from livekit.plugins.turn_detector.english import EnglishModel
-from livekit.plugins import deepgram, groq, silero
+from livekit.plugins import deepgram, groq, openai, silero
 from prometheus_client import (
     Counter, 
     Gauge, 
@@ -145,10 +145,16 @@ async def entrypoint(ctx: JobContext):
             start_new_turn()
 
     session = AgentSession(
-        turn_detection=EnglishModel(),
-        stt=deepgram.STT(),
+        # turn_detection=EnglishModel(),  # Turn detection disabled
+        stt=deepgram.STTv2(
+            model="flux-general-en",  # Using Deepgram Flux model
+            eager_eot_threshold=0.5,
+        ),
+        # stt=deepgram.STT(),
         tts=groq.TTS(model="playai-tts", voice="Arista-PlayAI"),
+        # tts=openai.TTS(voice="alloy"),
         vad=silero.VAD.load(min_silence_duration=0.3, activation_threshold=0.4),
+        preemptive_generation=True,
     )
     
     usage_collector = metrics.UsageCollector()
