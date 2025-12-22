@@ -117,8 +117,12 @@ services:
   #   ports:
   #     - "8000:8000"
   #   volumes:
-  #   - ./model_aliases.json:/home/ubuntu/speaches/model_aliases.json
-  #   entrypoint: ["/bin/sh", "-c", "uvicorn --factory speaches.main:create_app & until curl -s http://localhost:8000/v1/models/whisper-1 > /dev/null; do echo 'Waiting for server...'; sleep 2; done; curl -X POST http://localhost:8000/v1/models/whisper-1; wait"]
+  #     - ./model_aliases.json:/home/ubuntu/speaches/model_aliases.json
+  #     - speaches-models:/home/ubuntu/.cache/huggingface
+  #   environment:
+  #     - HF_HOME=/home/ubuntu/.cache/huggingface
+  #     - TRANSFORMERS_CACHE=/home/ubuntu/.cache/huggingface
+  #   entrypoint: ["/bin/sh", "-c", "echo 'Starting Speaches service...' && uvicorn --factory speaches.main:create_app & echo 'Waiting for server to start...' && until curl -s http://localhost:8000/v1/models/whisper-1 > /dev/null; do echo 'Waiting for server...'; sleep 5; done && echo 'Server is ready, loading model...' && curl -X POST http://localhost:8000/v1/models/whisper-1 && echo 'Model loaded successfully' && wait"]
   #   networks:
   #     - lknetwork
   agent-metrics:
