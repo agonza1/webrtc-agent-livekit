@@ -8,14 +8,16 @@ This project is a quickstart template to run locally or with 3rd party integrati
 
 - 🌐 **WebRTC + LiveKit**: Real-time media transport with WebRTC powered by LiveKit.
 - 🤖 **LiveKit Agent**: Modular plugin-based framework for voice AI agents.
-- 🗣️ **STT + TTS Support**: Plug in Whisper, Deepgram, ElevenLabs, or others.
+- 🗣️ **STT + TTS Support**: Plug in Whisper, Deepgram, 60db, ElevenLabs, or others. (The cloud agents ship with **Deepgram STT + 60db TTS**.)
 - 💬 **LLM Integration**: Use local LLaMA models or connect to AWS/ OpenAI / Anthropic APIs.
 - 🧪 **Local Dev**: Run everything locally with Docker Compose or Python virtual env.
 
 THERE ARE 3 IMPLEMENTATIONS OF THE AI AGENT:
-- [basic.py](./agent-worker/basic.py) using 3rd party services (Groq LLM, Deepgram STT, Groq TTS) with complete metrics capture in place.
-- [fast-preresponse.py](./agent-worker/fast-preresponse.py) using 3rd party services and the complete metrics capture in place.
+- [basic.py](./agent-worker/basic.py) using 3rd party services (Groq LLM, Deepgram STT, **60db TTS**) with complete metrics capture in place.
+- [fast-preresponse.py](./agent-worker/fast-preresponse.py) using 3rd party services (Groq LLM, Deepgram STT, **60db TTS**) and the complete metrics capture in place.
 - [fast-preresponse-ollama.py](./agent-worker/fast-preresponse-ollama.py) which is only using open source software and can run locally without internet.
+
+The two cloud agents use a custom **[60db](https://docs.60db.ai) TTS plugin** ([agent-worker/sixtydb_tts.py](./agent-worker/sixtydb_tts.py)) for speech synthesis while keeping **Deepgram** for speech-to-text. See [agent-worker/README.md](./agent-worker/README.md#60db-tts-integration) for details.
 
 Just update [Dockerfile](./agent-worker/Dockerfile) to use one or another. More info [here](./agent-worker/README.md).
 

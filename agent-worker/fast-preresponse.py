@@ -26,6 +26,8 @@ from livekit.agents import (
 from livekit.agents.llm.chat_context import ChatContext, ChatMessage
 from livekit.plugins.turn_detector.english import EnglishModel
 from livekit.plugins import deepgram, groq, openai, silero, aws
+from sixtydb_tts import TTS as SixtyDBTTS
+from sixtydb_stt import STT as SixtyDBSTT
 from prometheus_client import (
     start_http_server, 
     Summary, 
@@ -96,7 +98,7 @@ def initialize_metrics():
         LLM_LATENCY.labels(model='llama-3.3-70b', agent_type=AGENT_TYPE).set(0)
         LLM_LATENCY_SMALL.labels(model='llama-3.1-8b-instant', agent_type=AGENT_TYPE).set(0)
         STT_LATENCY.labels(provider='deepgram', agent_type=AGENT_TYPE).set(0)
-        TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(0)
+        TTS_LATENCY.labels(provider='60db', agent_type=AGENT_TYPE).set(0)
         EOU_LATENCY.labels(agent_type=AGENT_TYPE).set(0)
         TOTAL_CONVERSATION_LATENCY.labels(agent_type=AGENT_TYPE).set(0)
         
@@ -104,13 +106,13 @@ def initialize_metrics():
         LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b').inc(0)
         LLM_TOKENS.labels(type='completion', model='llama-3.3-70b').inc(0)
         STT_DURATION.labels(provider='deepgram').inc(0)
-        TTS_CHARS.labels(provider='openai').inc(0)
+        TTS_CHARS.labels(provider='60db').inc(0)
         TOTAL_TOKENS.inc(0)
         
         # Initialize cost metrics
         LLM_COST.labels(model='llama-3.3-70b').inc(0)
         STT_COST.labels(provider='deepgram').inc(0)
-        TTS_COST.labels(provider='openai').inc(0)
+        TTS_COST.labels(provider='60db').inc(0)
         
         logger.info("Successfully initialized all metrics with default values")
         
@@ -310,15 +312,17 @@ async def entrypoint(ctx: JobContext):
     session = AgentSession(
         turn_detection=EnglishModel(),
         stt=deepgram.STT(),
+        # stt=SixtyDBSTT(),  # 60db STT (REST/batch; auto-wrapped by VAD). Higher latency than Deepgram.
         # stt = aws.STT(
         #     session_id=str(uuid.uuid4()),
         #     language="en-US",
         # ),
         # tts=openai.TTS(voice="alloy"),
-        tts=groq.TTS(
-            model="playai-tts",
-            voice="Arista-PlayAI"
-        ),
+        tts=SixtyDBTTS(),  # 60db streaming WebSocket TTS (voice_id/key from env)
+        # tts=groq.TTS(
+        #     model="playai-tts",
+        #     voice="Arista-PlayAI"
+        # ),
         # tts=aws.TTS(
         #     voice="Ruth",
         #     speech_engine="generative",
@@ -371,7 +375,7 @@ async def entrypoint(ctx: JobContext):
                 current_prompt_tokens = LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b')._value.get() or 0
                 current_completion_tokens = LLM_TOKENS.labels(type='completion', model='llama-3.3-70b')._value.get() or 0
                 current_stt_duration = STT_DURATION.labels(provider='deepgram')._value.get() or 0
-                current_tts_chars = TTS_CHARS.labels(provider='openai')._value.get() or 0
+                current_tts_chars = TTS_CHARS.labels(provider='60db')._value.get() or 0
                 
                 # Update Prometheus metrics with logging
                 if hasattr(current_summary, 'llm_prompt_tokens'):
@@ -395,7 +399,7 @@ async def entrypoint(ctx: JobContext):
                 if hasattr(current_summary, 'tts_characters_count'):
                     new_tts_chars = current_summary.tts_characters_count
                     if new_tts_chars > current_tts_chars:
-                        TTS_CHARS.labels(provider='openai').inc(new_tts_chars - current_tts_chars)
+                        TTS_CHARS.labels(provider='60db').inc(new_tts_chars - current_tts_chars)
                         # logger.info(f"Updated TTS characters: {current_tts_chars} -> {new_tts_chars}")
                 
                 # Calculate costs from current summary values
@@ -430,7 +434,7 @@ async def entrypoint(ctx: JobContext):
                 # Update cost metrics (these are Gauges, so set() is fine)
                 LLM_COST.labels(model='llama-3.3-70b').set(llm_cost)
                 STT_COST.labels(provider='deepgram').set(stt_cost)
-                TTS_COST.labels(provider='openai').set(tts_cost)
+                TTS_COST.labels(provider='60db').set(tts_cost)
                 
                 logger.info(
                     "Updated cost metrics",
@@ -488,12 +492,12 @@ async def entrypoint(ctx: JobContext):
             logger.debug(f"Processing TTS metrics: {ev.metrics}")
             if hasattr(ev.metrics, 'duration'):
                 duration_ms = ev.metrics.duration * 1000  # Convert to ms
-                # TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(duration_ms)
+                # TTS_LATENCY.labels(provider='60db', agent_type=AGENT_TYPE).set(duration_ms)
                 # The amount of time (seconds) it took for the TTS model to generate the entire audio output.
                 logger.debug(f"Observed TTS latency: {duration_ms}ms")
             if hasattr(ev.metrics, 'ttfb'):
                 current_turn_metrics['tts_ttfb'] = ev.metrics.ttfb
-                TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(current_turn_metrics['tts_ttfb']*1000)
+                TTS_LATENCY.labels(provider='60db', agent_type=AGENT_TYPE).set(current_turn_metrics['tts_ttfb']*1000)
                 calculate_total_latency()
             logger.info(
                 "TTS Metrics",

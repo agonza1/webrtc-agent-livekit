@@ -16,6 +16,8 @@ from livekit.agents import (
 )
 from livekit.plugins.turn_detector.english import EnglishModel
 from livekit.plugins import deepgram, groq, openai, silero
+from sixtydb_tts import TTS as SixtyDBTTS
+from sixtydb_stt import STT as SixtyDBSTT
 from prometheus_client import (
     Counter, 
     Gauge, 
@@ -81,7 +83,7 @@ def initialize_metrics():
         # Initialize latency metrics with default labels
         LLM_LATENCY.labels(model='llama-3.3-70b', agent_type=AGENT_TYPE).set(0)
         STT_LATENCY.labels(provider='deepgram', agent_type=AGENT_TYPE).set(0)
-        TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(0)
+        TTS_LATENCY.labels(provider='60db', agent_type=AGENT_TYPE).set(0)
         EOU_LATENCY.labels(agent_type=AGENT_TYPE).set(0)
         TOTAL_CONVERSATION_LATENCY.labels(agent_type=AGENT_TYPE).set(0)
         
@@ -89,13 +91,13 @@ def initialize_metrics():
         LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b').inc(0)
         LLM_TOKENS.labels(type='completion', model='llama-3.3-70b').inc(0)
         STT_DURATION.labels(provider='deepgram').inc(0)
-        TTS_CHARS.labels(provider='openai').inc(0)
+        TTS_CHARS.labels(provider='60db').inc(0)
         TOTAL_TOKENS.inc(0)
         
         # Initialize cost metrics
         LLM_COST.labels(model='llama-3.3-70b').inc(0)
         STT_COST.labels(provider='deepgram').inc(0)
-        TTS_COST.labels(provider='openai').inc(0)
+        TTS_COST.labels(provider='60db').inc(0)
         
         logger.info("Successfully initialized all metrics with default values")
     except Exception as e:
@@ -151,7 +153,9 @@ async def entrypoint(ctx: JobContext):
             eager_eot_threshold=0.5,
         ),
         # stt=deepgram.STT(),
-        tts=groq.TTS(model="playai-tts", voice="Arista-PlayAI"),
+        # stt=SixtyDBSTT(),  # 60db STT (REST/batch; auto-wrapped by VAD). Higher latency than Deepgram.
+        tts=SixtyDBTTS(),  # 60db streaming WebSocket TTS (voice_id/key from env)
+        # tts=groq.TTS(model="playai-tts", voice="Arista-PlayAI"),
         # tts=openai.TTS(voice="alloy"),
         vad=silero.VAD.load(min_silence_duration=0.3, activation_threshold=0.4),
         preemptive_generation=True,
@@ -198,7 +202,7 @@ async def entrypoint(ctx: JobContext):
                 current_prompt_tokens = LLM_TOKENS.labels(type='prompt', model='llama-3.3-70b')._value.get() or 0
                 current_completion_tokens = LLM_TOKENS.labels(type='completion', model='llama-3.3-70b')._value.get() or 0
                 current_stt_duration = STT_DURATION.labels(provider='deepgram')._value.get() or 0
-                current_tts_chars = TTS_CHARS.labels(provider='openai')._value.get() or 0
+                current_tts_chars = TTS_CHARS.labels(provider='60db')._value.get() or 0
                 
                 # Update Prometheus metrics with logging
                 if hasattr(current_summary, 'llm_prompt_tokens'):
@@ -219,7 +223,7 @@ async def entrypoint(ctx: JobContext):
                 if hasattr(current_summary, 'tts_characters_count'):
                     new_tts_chars = current_summary.tts_characters_count
                     if new_tts_chars > current_tts_chars:
-                        TTS_CHARS.labels(provider='openai').inc(new_tts_chars - current_tts_chars)
+                        TTS_CHARS.labels(provider='60db').inc(new_tts_chars - current_tts_chars)
                 
                 # Calculate costs from current summary values
                 llm_cost = (getattr(current_summary, 'llm_prompt_tokens', 0) * 0.00001 +  # $0.01 per 1K input tokens
@@ -230,7 +234,7 @@ async def entrypoint(ctx: JobContext):
                 # Update cost metrics (these are Gauges, so set() is fine)
                 LLM_COST.labels(model='llama-3.3-70b').set(llm_cost)
                 STT_COST.labels(provider='deepgram').set(stt_cost)
-                TTS_COST.labels(provider='openai').set(tts_cost)
+                TTS_COST.labels(provider='60db').set(tts_cost)
             except Exception as e:
                 logger.error(f"Error updating Prometheus metrics: {e}")
         except Exception as e:
@@ -270,7 +274,7 @@ async def entrypoint(ctx: JobContext):
                 logger.debug(f"Observed TTS latency: {duration_ms}ms")
             if hasattr(ev.metrics, 'ttfb'):
                 current_turn_metrics['tts_ttfb'] = ev.metrics.ttfb
-                TTS_LATENCY.labels(provider='openai', agent_type=AGENT_TYPE).set(current_turn_metrics['tts_ttfb']*1000)
+                TTS_LATENCY.labels(provider='60db', agent_type=AGENT_TYPE).set(current_turn_metrics['tts_ttfb']*1000)
                 logger.info(f"Updated TTS latency: {current_turn_metrics['tts_ttfb']*1000}ms")
                 calculate_total_latency()
         
